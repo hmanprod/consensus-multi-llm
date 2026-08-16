@@ -1,5 +1,6 @@
 import type { RunResult } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
+import { currentUserId } from "@/lib/user-context";
 import type {
   StoredConfig,
   StoredCredential,
@@ -8,26 +9,23 @@ import type {
   Store,
 } from "./types";
 
-let demo: { userId: string; workspaceId: string } | null = null;
-
-async function ensureDemo() {
-  if (demo) return demo;
+async function ensureUser() {
+  const clerkId = currentUserId();
   const prisma = getPrisma();
-  let user = await prisma.user.findUnique({ where: { clerkId: "demo" } });
+  let user = await prisma.user.findUnique({ where: { clerkId } });
   if (!user) {
-    user = await prisma.user.create({ data: { clerkId: "demo", email: "demo@consensus.local" } });
+    user = await prisma.user.create({ data: { clerkId, email: `${clerkId}@consensus.local` } });
   }
   let workspace = await prisma.workspace.findFirst({ where: { ownerId: user.id } });
   if (!workspace) {
     workspace = await prisma.workspace.create({ data: { name: "Défaut", ownerId: user.id } });
   }
-  demo = { userId: user.id, workspaceId: workspace.id };
-  return demo;
+  return { userId: user.id, workspaceId: workspace.id };
 }
 
 export const prismaStore: Store = {
   async createConversation(title) {
-    const { userId, workspaceId } = await ensureDemo();
+    const { userId, workspaceId } = await ensureUser();
     const c = await getPrisma().conversation.create({
       data: { title, userId, workspaceId },
     });
@@ -35,7 +33,7 @@ export const prismaStore: Store = {
   },
 
   async listConversations() {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const all = await getPrisma().conversation.findMany({
       where: { userId },
       orderBy: { updatedAt: "desc" },
@@ -164,7 +162,7 @@ export const prismaStore: Store = {
   },
 
   async saveCredential(provider, encryptedKey, keyIv) {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const providerRow = await getPrisma().provider.upsert({
       where: { slug: provider },
       create: { slug: provider, name: provider },
@@ -178,7 +176,7 @@ export const prismaStore: Store = {
   },
 
   async getCredential(provider) {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const providerRow = await getPrisma().provider.findUnique({ where: { slug: provider } });
     if (!providerRow) return null;
     const cred = await getPrisma().credential.findUnique({
@@ -189,7 +187,7 @@ export const prismaStore: Store = {
   },
 
   async listCredentials() {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const all = await getPrisma().credential.findMany({
       where: { userId },
       include: { provider: true },
@@ -203,7 +201,7 @@ export const prismaStore: Store = {
   },
 
   async saveConfig(name, profile, config) {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const c = await getPrisma().orchestrationConfiguration.create({
       data: {
         userId,
@@ -221,7 +219,7 @@ export const prismaStore: Store = {
   },
 
   async listConfigs() {
-    const { userId } = await ensureDemo();
+    const { userId } = await ensureUser();
     const all = await getPrisma().orchestrationConfiguration.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },

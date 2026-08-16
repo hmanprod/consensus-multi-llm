@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { authEnabled } from "@/lib/user-context";
 import "./globals.css";
 
 const inter = Inter({
@@ -16,9 +18,13 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const body = (
+    <body className={`${inter.variable} antialiased`}>{children}</body>
+  );
+  if (!authEnabled()) return <html lang="fr">{body}</html>;
   return (
     <html lang="fr">
-      <body className={`${inter.variable} antialiased`}>{children}</body>
+      <ClerkProvider>{body}</ClerkProvider>
     </html>
   );
 }

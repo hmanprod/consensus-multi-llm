@@ -12,9 +12,9 @@ Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan sou
 
 - **Phase 0 — Cadrage** : plan d'implémentation validé.
 - **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter/mock, orchestrateur A0→A1→B1→B2→B3→C, budget/coûts, timeline).
-- **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres.
+- **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres, Clerk scaffoldé (env-gated : actif si `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`, données liées à l'utilisateur via AsyncLocalStorage).
 - Mode démo par défaut (provider `mock`, aucun coût) tant qu'aucune clé API n'est configurée ; une clé enregistrée active le provider correspondant.
-- La prochaine étape recommandée : appliquer la migration Neon (`npx prisma migrate deploy`) et brancher Clerk.
+- La prochaine étape recommandée : appliquer la migration Neon (`npx prisma migrate deploy`) et configurer Clerk (dashboard + env).
 
 ## Décisions structurantes (à respecter)
 

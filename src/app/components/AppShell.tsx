@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import type { StoredConversation, StoredMessage } from "@/lib/store";
 import type { Profile } from "@/contracts/workflow";
 import { askQuestion, getConversationData, listAllConversations } from "@/app/actions";
@@ -23,7 +24,13 @@ const PROFILE_DESCRIPTIONS: Record<Profile, { title: string; subtitle: string }>
   },
 };
 
-export function AppShell({ initialConversations }: { initialConversations: StoredConversation[] }) {
+export function AppShell({
+  initialConversations,
+  authEnabled,
+}: {
+  initialConversations: StoredConversation[];
+  authEnabled: boolean;
+}) {
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
@@ -79,6 +86,7 @@ export function AppShell({ initialConversations }: { initialConversations: Store
         onNew={newConversation}
         profile={profile}
         setProfile={setProfile}
+        authEnabled={authEnabled}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -143,6 +151,7 @@ function Sidebar({
   onNew,
   profile,
   setProfile,
+  authEnabled,
 }: {
   conversations: StoredConversation[];
   selectedId: string | null;
@@ -150,12 +159,14 @@ function Sidebar({
   onNew: () => void;
   profile: Profile;
   setProfile: (p: Profile) => void;
+  authEnabled: boolean;
 }) {
   const [showProfileDetails, setShowProfileDetails] = useState(false);
   const details = PROFILE_DESCRIPTIONS[profile];
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface">
+      <AuthRow enabled={authEnabled} />
       <button onClick={onNew} className="flex items-center gap-2 px-4 pb-3 pt-4 text-left">
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-sm font-semibold text-bg">
           +
@@ -339,6 +350,34 @@ function Composer({
         </button>
       </form>
       {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function AuthRow({ enabled }: { enabled: boolean }) {
+  if (!enabled) {
+    return (
+      <div className="flex items-center gap-2 px-4 pt-4">
+        <span className="rounded-md border border-border bg-bg px-2 py-0.5 text-xs font-medium text-ink-faint">
+          Mode démo
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="border-b border-border px-4 py-3">
+      <SignedIn>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <UserButton />
+          </div>
+        </div>
+      </SignedIn>
+      <SignedOut>
+        <Link href="/sign-in" className="block w-full rounded-lg border border-border bg-bg px-3 py-2 text-center text-sm font-medium text-ink hover:bg-surface-hover">
+          Se connecter
+        </Link>
+      </SignedOut>
     </div>
   );
 }
