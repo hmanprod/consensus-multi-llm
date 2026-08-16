@@ -10,9 +10,11 @@ Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan sou
 
 ## État actuel
 
-- **Phase 0 — Cadrage** : plan d'implémentation rédigé, pas encore validé.
-- Aucun code n'a encore été écrit.
-- La prochaine étape recommandée est la **spécification technique** : arborescence, contrats TypeScript du Model Gateway, schéma Prisma, routes serveur, maquettes.
+- **Phase 0 — Cadrage** : plan d'implémentation validé.
+- **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter/mock, orchestrateur A0→A1→B1→B2→B3→C, budget/coûts, timeline).
+- **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres.
+- Mode démo par défaut (provider `mock`, aucun coût) tant qu'aucune clé API n'est configurée ; une clé enregistrée active le provider correspondant.
+- La prochaine étape recommandée : appliquer la migration Neon (`npx prisma migrate deploy`) et brancher Clerk.
 
 ## Décisions structurantes (à respecter)
 
@@ -50,10 +52,28 @@ Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan sou
 
 ## Commandes
 
-Aucun outillage installé pour l'instant. Ajouter ici les commandes de dev/test/lint une fois le projet scaffoldé (Next.js + Prisma).
+Outilillage installé (scaffold Next.js 16 + Prisma 7) :
+
+- `npm run dev` — serveur de développement (http://localhost:3000)
+- `npm run build` — build de production
+- `npm run start` — lance le build de production
+- `npm run lint` — ESLint
+- `npx tsc --noEmit` — typecheck TypeScript
+- `npx prisma generate` — régénère le client Prisma
+- `npx tsx scripts/test-engine.ts` — test du moteur (workflow complet en mode mock)
 
 ## Pour démarrer
 
 1. Valider le plan dans `docs/plan-implementation-consensus-multi-llm.md`.
 2. Produire la spécification technique (arborescence, contrats TypeScript du Model Gateway, schéma Prisma, routes serveur, maquettes).
 3. Implémenter Phase 1 — Moteur technique (Model Gateway, adapters, appels parallèles, B1, B2, round ciblé).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

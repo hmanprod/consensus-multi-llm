@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  clerkId      String    @unique
+  email        String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workspaces   Workspace[]
+  credentials  Credential[]
+  configs      OrchestrationConfiguration[]
+  conversations Conversation[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  conversations Conversation[]
+}
+
+model Provider {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  baseUrl   String?
+  createdAt DateTime  @default(now())
+  models    Model[]
+  credentials Credential[]
+}
+
+model Model {
+  id         String   @id @default(cuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  slug       String
+  name       String
+  context    Int      @default(128000)
+  promptCostPer1K  Decimal @default(0)
+  completionCostPer1K Decimal @default(0)
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  invocations ModelInvocation[]
+  @@unique([providerId, slug])
+}
+
+model Credential {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId   String
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  encryptedKey String
+  keyIv        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  @@unique([userId, providerId])
+}
+
+model OrchestrationConfiguration {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  profile             String   @default("balanced") // economical | balanced | custom
+  orchestratorModelId String?
+  consensusModelId    String?
+  synthesisModelId    String?
+  critiqueModelId     String?
+  analystModelIds     String[]
+  maxRounds           Int      @default(1)
+  maxBudgetCents      Int      @default(100)
+  maxTokens           Int      @default(8000)
+  timeoutMs           Int      @default(120000)
+  minAgreementScore   Int      @default(70)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  runs                WorkflowRun[]
+}
+
+model Conversation {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String   @default("Nouvelle conversation")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  messages         Message[]
+  runs             WorkflowRun[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // user | assistant
+  content        String
+  runId          String?
+  createdAt      DateTime     @default(now())
+}
+
+model WorkflowRun {
+  id            String       @id @default(cuid())
+  conversationId String
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  configurationId String?
+  configuration OrchestrationConfiguration? @relation(fields: [configurationId], references: [id])
+  question      String
+  status        String // running | completed | stopped | failed | budget_exceeded
+  score         Int?
+  confidence    Int?
+  rounds        Int          @default(0)
+  estimatedCostCents Decimal?
+  actualCostCents   Decimal?
+  durationMs    Int?
+  error         String?
+  resultJson    Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  invocations   ModelInvocation[]
+  consensus     ConsensusReport?
+}
+
+model ModelInvocation {
+  id          String       @id @default(cuid())
+  runId       String
+  run         WorkflowRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  modelId     String?
+  model       Model?       @relation(fields: [modelId], references: [id])
+  role        String // orchestrator | analyst | critique | consensus | synthesis | targeted
+  status      String // ok | error | timeout | skipped
+  promptTokens Int        @default(0)
+  completionTokens Int    @default(0)
+  costCents   Decimal      @default(0)
+  latencyMs   Int          @default(0)
+  modelSlug   String?
+  error       String?
+  createdAt   DateTime     @default(now())
+}
+
+model ConsensusReport {
+  id        String     @id @default(cuid())
+  runId     String     @unique
+  run       WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  status    String // consensus_reached | partial | major_disagreement | insufficient_info | budget_exceeded
+  score     Int
+  confidence Int
+  agreements String     @db.Text
+  disagreements String  @db.Text
+  missingInfo String    @db.Text
+  recommendedAction String
+  targetedRoundTriggered Boolean @default(false)
+  synthesis String      @db.Text
+  createdAt DateTime    @default(now())
+}
