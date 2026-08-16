@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { Show, UserButton } from "@clerk/nextjs";
 import type { StoredConversation, StoredMessage } from "@/lib/store";
 import type { Profile } from "@/contracts/workflow";
 import { askQuestion, getConversationData, listAllConversations } from "@/app/actions";
@@ -366,18 +366,18 @@ function AuthRow({ enabled }: { enabled: boolean }) {
   }
   return (
     <div className="border-b border-border px-4 py-3">
-      <SignedIn>
+      <Show when="signed-in">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <UserButton />
           </div>
         </div>
-      </SignedIn>
-      <SignedOut>
+      </Show>
+      <Show when="signed-out">
         <Link href="/sign-in" className="block w-full rounded-lg border border-border bg-bg px-3 py-2 text-center text-sm font-medium text-ink hover:bg-surface-hover">
           Se connecter
         </Link>
-      </SignedOut>
+      </Show>
     </div>
   );
 }
