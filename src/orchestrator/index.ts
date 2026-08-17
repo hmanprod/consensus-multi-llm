@@ -1,11 +1,14 @@
 import type {
   AnalysisOutput,
+  FinalSynthesisOutput,
   OrchestrationConfig,
   RunResult,
   TimelineEntry,
 } from "@/contracts/workflow";
 import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage } from "@/contracts/gateway";
 import { estimateCost, tokensToUsd } from "@/gateway/cost";
+import { parseConsensusReport } from "@/lib/consensus-report";
+import { sanitizeFinalResponse } from "@/lib/sanitize";
 import {
   analystAnalysisPrompt,
   consolidationPrompt,
@@ -191,12 +194,14 @@ class Orchestrator {
       this.config.orchestrator,
       this.messages(finalSynthesisPrompt(this.question, contributions))
     );
-    const finalSynthesis: AnalysisOutput = {
+    const finalText = sanitizeFinalResponse(fRes.text);
+    const finalSynthesis: FinalSynthesisOutput = {
       label: "Final",
       role: "orchestrator",
       model: this.config.orchestrator,
-      text: fRes.text,
+      text: finalText,
       usage: fRes.usage,
+      report: parseConsensusReport(finalText) ?? undefined,
     };
     this.tick("F", "Synthèse finale", fRes.error ? "error" : "done", Date.now() - tF);
 

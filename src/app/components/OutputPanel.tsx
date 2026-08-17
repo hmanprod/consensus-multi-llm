@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoredRun } from "@/lib/store";
-import type { TimelineEntry } from "@/contracts/workflow";
+import type { ConsensusReport, TimelineEntry } from "@/contracts/workflow";
+import { parseConsensusReport } from "@/lib/consensus-report";
 import { getRunData } from "@/app/actions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { Badge } from "./ui/Badge";
@@ -215,6 +216,10 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 
 function SummaryView({ run }: { run: StoredRun }) {
   const r = run.result!;
+  const report = useMemo<ConsensusReport | null>(
+    () => r.finalSynthesis.report ?? parseConsensusReport(r.finalSynthesis.text),
+    [r]
+  );
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
@@ -225,12 +230,63 @@ function SummaryView({ run }: { run: StoredRun }) {
       {r.stoppedEarly && (
         <Badge tone="warning">Budget atteint — analyse arrêtée en avance</Badge>
       )}
-      <div>
-        <SectionTitle>Synthèse</SectionTitle>
-        <MarkdownRenderer content={r.finalSynthesis.text} />
-      </div>
+
+      {report ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-border bg-surface p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Recommandation</p>
+              {report.confidence && <ConfidenceBadge confidence={report.confidence} />}
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-ink">{report.recommendation}</p>
+          </div>
+
+          <ReportSection title="Résumé" items={report.summary} />
+          <ReportSection title="Points d'accord" items={report.agreements} />
+          <ReportSection title="Points de désaccord" items={report.disagreements} />
+          <ReportSection title="Limites" items={report.limitations} />
+          <ReportSection title="Prochaine étape" items={report.nextSteps} />
+
+          <Accordion title="Synthèse complète (Markdown)">
+            <MarkdownRenderer content={r.finalSynthesis.text} />
+          </Accordion>
+        </div>
+      ) : (
+        <div>
+          <SectionTitle>Synthèse</SectionTitle>
+          <MarkdownRenderer content={r.finalSynthesis.text} />
+        </div>
+      )}
     </div>
   );
+}
+
+function ReportSection({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <SectionTitle>{title}</SectionTitle>
+      <ul className="space-y-1.5 text-sm leading-relaxed text-ink">
+        {items.map((item, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const CONFIDENCE_LABEL: Record<"low" | "medium" | "high", string> = {
+  low: "Confiance faible",
+  medium: "Confiance moyenne",
+  high: "Confiance élevée",
+};
+
+function ConfidenceBadge({ confidence }: { confidence: "low" | "medium" | "high" }) {
+  const tone = confidence === "high" ? "success" : confidence === "low" ? "warning" : "neutral";
+  return <Badge tone={tone}>{CONFIDENCE_LABEL[confidence]}</Badge>;
 }
 
 function ComparisonView({ run }: { run: StoredRun }) {

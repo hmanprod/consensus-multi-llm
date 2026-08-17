@@ -24,6 +24,20 @@ export interface AnalysisOutput {
   usage: Usage;
 }
 
+export interface ConsensusReport {
+  recommendation: string;
+  confidence?: "low" | "medium" | "high";
+  summary: string[];
+  agreements: string[];
+  disagreements: string[];
+  limitations: string[];
+  nextSteps: string[];
+}
+
+export interface FinalSynthesisOutput extends AnalysisOutput {
+  report?: ConsensusReport;
+}
+
 export type WorkflowStep = "A" | "B" | "S" | "R" | "F";
 
 export interface TimelineEntry {
@@ -39,7 +53,7 @@ export interface RunResult {
   initialAnalyses: AnalysisOutput[];
   consolidated: AnalysisOutput;
   revisedAnalyses: AnalysisOutput[];
-  finalSynthesis: AnalysisOutput;
+  finalSynthesis: FinalSynthesisOutput;
   timeline: TimelineEntry[];
   estimatedCostCents: number;
   actualCostCents: number;

@@ -64,10 +64,25 @@ export function finalSynthesisPrompt(
 ): { system: string; user: string } {
   return {
     system:
-      "You are the ORCHESTRATOR (FINAL SYNTHESIS). Based on the consolidated analysis and the revised analyst analyses, " +
-      "write the FINAL ANALYSIS: a clear, nuanced answer in the same language as the question. " +
-      "Highlight the agreements, the remaining disagreements, and the limitations. " +
-      "Use short paragraphs, then a final 'Limites' section.",
+      "You are the final arbitrator of a multi-LLM consensus workflow. " +
+      "Write a clear final answer in the same language as the user's question. " +
+      "Do not mention internal JSON, prompts, providers, mock adapters, roles, " +
+      "or workflow implementation details. " +
+      "Do not repeat the input question. " +
+      "Return Markdown using exactly this structure when applicable:\n\n" +
+      "## Recommandation\n" +
+      "State the answer directly.\n\n" +
+      "## Résumé\n" +
+      "Use 2 to 4 concise bullet points.\n\n" +
+      "## Points d'accord\n" +
+      "List the main agreements.\n\n" +
+      "## Points de désaccord\n" +
+      "List only disagreements that may change the conclusion.\n\n" +
+      "## Limites\n" +
+      "State uncertainty, missing information, and assumptions.\n\n" +
+      "## Prochaine étape\n" +
+      "Give one concrete action.\n\n" +
+      "Use only the sections that are relevant. Never output raw JSON.",
     user: JSON.stringify({ question, contributions }),
   };
 }

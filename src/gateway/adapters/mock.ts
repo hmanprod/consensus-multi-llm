@@ -6,11 +6,27 @@ function estimateTokens(text: string): number {
   return Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / WORDS_PER_TOKEN));
 }
 
-const ROLES: Record<string, string> = {
-  analyst: "Analyste indépendant",
-  synthesis: "Arbitre final",
-  orchestrator: "Orchestrateur",
-};
+function extractQuestion(input: string): string {
+  try {
+    const parsed = JSON.parse(input) as { question?: string };
+    if (typeof parsed.question === "string" && parsed.question.trim()) return parsed.question;
+    return input;
+  } catch {
+    return input;
+  }
+}
+
+function cleanQuestion(input: string, max = 160): string {
+  return extractQuestion(input).replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function detectRole(system: string): "analyst" | "consensus" | "synthesis" | "orchestrator" {
+  if (system.includes("ANALYST")) return "analyst";
+  if (system.includes("SYNTHESIS") || system.includes("final arbitrator")) return "synthesis";
+  if (system.includes("CONSENSUS")) return "consensus";
+  if (system.includes("ORCHESTRATOR")) return "orchestrator";
+  return "analyst";
+}
 
 export class MockAdapter {
   readonly provider = "mock";
@@ -20,10 +36,9 @@ export class MockAdapter {
     const system = req.messages.find((m) => m.role === "system")?.content ?? "";
     const user = req.messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
 
-    const role = ROLES[system.includes("ANALYST") ? "analyst" : system.includes("CONSENSUS") ? "consensus" : system.includes("SYNTHESIS") ? "synthesis" : system.includes("ORCHESTRATOR") ? "orchestrator" : "analyst"];
-    const isAnalysis = system.includes("ANALYST") || system.includes("TARGETED");
+    const role = detectRole(system);
 
-    const text = this.buildText(role, user, req.spec.model, isAnalysis);
+    const text = this.buildText(role, user);
     const usage = {
       promptTokens: estimateTokens(system + user),
       completionTokens: estimateTokens(text),
@@ -39,21 +54,23 @@ export class MockAdapter {
     };
   }
 
-  private buildText(role: string, question: string, model: string, isAnalysis: boolean): string {
-    const q = question.slice(0, 120).replace(/\s+/g, " ").trim();
-    if (!isAnalysis) {
-      return `[mock:${model}] Réponse de rôle ${role.toLowerCase()} pour « ${q} ».\n\nContexte reçu, ${role.toLowerCase() === "orchestrateur" ? "analyse en cours de consolidation." : "synthèse prête."}`;
-    }
+  private buildText(role: string, question: string): string {
+    const q = cleanQuestion(question);
+    if (role === "synthesis") return this.buildSynthesis(question);
+    if (role === "orchestrator") return this.buildConsolidation(q);
+    if (role === "consensus") return this.buildConsensus(q);
+    return this.buildAnalysis(q);
+  }
 
+  private buildAnalysis(q: string): string {
     const hasNumbers = /\d/.test(q);
     const hasConjunction = /\b(mais|cependant|par contre|pourtant)\b/i.test(q);
     const hasUncertainty = /\b(peut-être|probablement|pourrait|sans doute)\b/i.test(q);
 
     const bullet = (s: string) => `- ${s}`;
     const lines: string[] = [
-      `Analyse indépendante (modèle ${model}, rôle ${role.toLowerCase()}) de la question : ${q}.`,
+      `Point de vue principal : réponse structurée en ${hasNumbers ? "trois " : "deux "}parties, avec évaluation des enjeux.`,
     ];
-    lines.push(bullet(`Point de vue principal : réponse structurée en ${hasNumbers ? "trois " : "deux "}parties, avec évaluation des enjeux.`));
     lines.push(bullet(`Argument clé : distinguer les faits vérifiables des interprétations, et mentionner le contexte pertinent.`));
     if (hasConjunction) {
       lines.push(bullet(`Nuance importante : la question contient une opposition ; il faut pondérer les deux faces.`));
@@ -67,5 +84,61 @@ export class MockAdapter {
     }
     lines.push(bullet(`Prochaines étapes suggérées : vérifier les sources, comparer les interprétations, puis rédiger une synthèse nuancée.`));
     return lines.join("\n");
+  }
+
+  private buildConsolidation(q: string): string {
+    return [
+      `Synthèse consolidée de l'analyse de la question : ${q}`,
+      "",
+      "- Faits communs : les données factuelles centrales convergent entre les analyses.",
+      "- Interprétations divergentes : les critères de priorité diffèrent selon les analystes.",
+      "- Position consolidée : recommander un test contrôlé avant tout déploiement à grande échelle.",
+      "- Réserves : certaines conclusions restent conditionnelles faute de données complètes.",
+    ].join("\n");
+  }
+
+  private buildConsensus(q: string): string {
+    return [
+      `Point de consensus sur la question : ${q}`,
+      "",
+      "- Accord : les données factuelles centrales sont partagées par l'ensemble des analyses.",
+      "- Désaccord qui change la conclusion : l'importance relative des critères de décision diffère.",
+      "- Conclusion : un test contrôlé est nécessaire avant de choisir une option à grande échelle.",
+    ].join("\n");
+  }
+
+  private buildSynthesis(questionInput: string): string {
+    const q = cleanQuestion(questionInput);
+    const title = q ? `En réponse à « ${q} »` : "En réponse à la question posée";
+    return [
+      "## Recommandation",
+      "",
+      `${title}, la stratégie la plus fiable est celle qui offre le meilleur équilibre entre coût maîtrisé, capacité de mesure et prévisibilité des résultats.`,
+      "",
+      "## Résumé",
+      "",
+      "- Plusieurs analystes convergent sur les points factuels centraux.",
+      "- Les divergences portent sur l'importance relative des critères de décision.",
+      "- Un test contrôlé est préférable à un déploiement immédiat à grande échelle.",
+      "",
+      "## Points d'accord",
+      "",
+      "- Les faits vérifiables doivent primer sur les interprétations.",
+      "- La qualité du ciblage est déterminante pour le résultat.",
+      "- Les données disponibles doivent être confirmées par une période de test identique.",
+      "",
+      "## Points de désaccord",
+      "",
+      "- L'importance relative des critères de décision varie selon les analystes.",
+      "- Les données disponibles ne permettent pas de départager totalement les performances à long terme.",
+      "",
+      "## Limites",
+      "",
+      "Cette recommandation repose sur des hypothèses générales. Il faudrait comparer les coûts d'acquisition, les taux de conversion et la qualité des résultats sur une période de test identique.",
+      "",
+      "## Prochaine étape",
+      "",
+      "Lancer un test contrôlé de deux semaines avec un budget équivalent pour chaque option, puis comparer les résultats mesurables.",
+    ].join("\n");
   }
 }

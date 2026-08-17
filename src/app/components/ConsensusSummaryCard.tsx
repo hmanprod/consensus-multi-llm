@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { useMemo, useState } from "react";
+import { parseConsensusReport } from "@/lib/consensus-report";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
 import { AlertIcon, CheckIcon, CopyIcon, PanelIcon, RefreshIcon, SparklesIcon } from "./ui/icons";
+
+function excerpt(text: string, len = 220): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > len ? `${clean.slice(0, len)}…` : clean;
+}
 
 export function ConsensusSummaryCard({
   content,
@@ -21,6 +26,11 @@ export function ConsensusSummaryCard({
 }) {
   const [copied, setCopied] = useState(false);
   const isError = content.startsWith("Une erreur est survenue");
+
+  const preview = useMemo(() => {
+    const report = parseConsensusReport(content);
+    return report?.recommendation ? excerpt(report.recommendation) : excerpt(content);
+  }, [content]);
 
   async function copy() {
     await onCopy();
@@ -44,7 +54,7 @@ export function ConsensusSummaryCard({
     <article className="rounded-xl border border-border bg-bg p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-ink">Réponse finale</span>
+          <span className="text-sm font-semibold text-ink">Synthèse du consensus</span>
           <Badge tone="accent">Consensus</Badge>
         </div>
         <div className="flex items-center gap-1">
@@ -60,15 +70,19 @@ export function ConsensusSummaryCard({
             <RefreshIcon size={14} />
             Relancer
           </Button>
-          <Button size="sm" variant="secondary" onClick={onOpenOutput}>
-            <PanelIcon size={14} />
-            Voir le consensus
-          </Button>
         </div>
       </div>
 
       <div className="mt-4">
-        <MarkdownRenderer content={content} />
+        <p className="text-[15px] leading-relaxed text-ink">{preview}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-xs text-ink-faint">Version complète et détaillée dans le panneau de droite.</p>
+        <Button size="sm" variant="secondary" onClick={onOpenOutput}>
+          <PanelIcon size={14} />
+          Voir la synthèse complète
+        </Button>
       </div>
     </article>
   );
