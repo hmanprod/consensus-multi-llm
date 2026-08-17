@@ -51,24 +51,24 @@ export function ConsensusSummaryCard({
   }
 
   return (
-    <article className="rounded-xl border border-border bg-bg p-5 shadow-sm">
+    <article className="rounded-xl border border-border bg-bg p-4 shadow-sm sm:p-5">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-ink">Synthèse du consensus</span>
-          <Badge tone="accent">Consensus</Badge>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-ink">Synthèse du consensus</span>
+          <Badge tone="accent" className="shrink-0">Consensus</Badge>
         </div>
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={copy} aria-label="Copier la réponse">
+        <div className="flex shrink-0 items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={copy} aria-label="Copier la réponse" title="Copier">
             {copied ? <CheckIcon size={14} className="text-success" /> : <CopyIcon size={14} />}
-            {copied ? "Copié" : "Copier"}
+            <span className="hidden sm:inline">{copied ? "Copié" : "Copier"}</span>
           </Button>
-          <Button size="sm" variant="ghost" onClick={onDeepen}>
+          <Button size="sm" variant="ghost" onClick={onDeepen} aria-label="Approfondir" title="Approfondir">
             <SparklesIcon size={14} />
-            Approfondir
+            <span className="hidden sm:inline">Approfondir</span>
           </Button>
-          <Button size="sm" variant="ghost" onClick={onRegenerate}>
+          <Button size="sm" variant="ghost" onClick={onRegenerate} aria-label="Relancer l'analyse" title="Relancer">
             <RefreshIcon size={14} />
-            Relancer
+            <span className="hidden sm:inline">Relancer</span>
           </Button>
         </div>
       </div>
@@ -77,9 +77,9 @@ export function ConsensusSummaryCard({
         <p className="text-[15px] leading-relaxed text-ink">{preview}</p>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3">
+      <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-ink-faint">Version complète et détaillée dans le panneau de droite.</p>
-        <Button size="sm" variant="secondary" onClick={onOpenOutput}>
+        <Button size="sm" variant="secondary" onClick={onOpenOutput} className="w-full justify-center sm:w-auto">
           <PanelIcon size={14} />
           Voir la synthèse complète
         </Button>

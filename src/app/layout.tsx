@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { authEnabled } from "@/lib/user-context";
@@ -13,6 +13,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Consensus Multi-LLM",
   description: "Plusieurs modèles LLM analysent votre question en collaboration : l'orchestrateur consolide les analyses, puis produit une synthèse finale nuancée.",
+};
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

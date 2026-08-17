@@ -36,7 +36,13 @@ export function Progress({ active, onStop }: { active: boolean; onStop?: () => v
       className="rounded-xl border border-border bg-surface p-4"
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-ink">Analyse en cours</p>
+        <p className="flex items-center gap-2 text-sm font-medium text-ink">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+          </span>
+          Analyse en cours
+        </p>
         {onStop && (
           <button
             onClick={onStop}
@@ -47,7 +53,18 @@ export function Progress({ active, onStop }: { active: boolean; onStop?: () => v
           </button>
         )}
       </div>
-      <ul className="mt-3 space-y-1.5">
+      <div className="mt-3 sm:hidden">
+        <div className="h-1 overflow-hidden rounded-full bg-border-strong">
+          <div
+            className="h-full rounded-full bg-accent transition-[width] duration-500"
+            style={{ width: `${((current + 1) / PHASES.length) * 100}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-xs text-ink-secondary">
+          {current + 1}/{PHASES.length} · {PHASES[current].label}
+        </p>
+      </div>
+      <ul className="mt-3 hidden space-y-1.5 sm:block">
         {PHASES.map((phase, i) => {
           const done = i < current;
           const doing = active && i === current;

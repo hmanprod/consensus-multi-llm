@@ -51,7 +51,7 @@ export function Composer({
           rows={1}
           placeholder="Posez votre question…"
           aria-label="Votre question"
-          className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-ink outline-none placeholder:text-ink-faint"
+          className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-base leading-relaxed text-ink outline-none placeholder:text-ink-faint sm:text-[15px]"
         />
         {busy && onStop ? (
           <button
@@ -81,7 +81,7 @@ export function Composer({
             value={profile}
             onChange={(e) => setProfile(e.target.value as Profile)}
             aria-label="Profil d'analyse"
-            className="rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-ink outline-none transition-colors focus:border-accent"
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
           >
             <option value="economical">Économique · {analystCount} analystes</option>
             <option value="custom">Personnalisé</option>

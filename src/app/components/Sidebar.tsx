@@ -119,11 +119,11 @@ export function Sidebar({
             onClick={onCloseMobile}
             aria-hidden="true"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-border bg-surface shadow-lg">
+          <aside className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)] shadow-lg">
             {body}
             <button
               onClick={onCloseMobile}
-              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink"
+              className="absolute right-2 top-[calc(0.5rem+env(safe-area-inset-top))] inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink"
               aria-label="Fermer le menu"
             >
               <CloseIcon size={16} />
@@ -217,7 +217,7 @@ function SidebarContent({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher"
             aria-label="Rechercher une conversation"
-            className="h-8 w-full rounded-lg border border-transparent bg-surface-hover pl-8 pr-3 text-sm text-ink outline-none placeholder:text-ink-faint transition-colors focus:border-accent focus:bg-bg"
+            className="h-8 w-full rounded-lg border border-transparent bg-surface-hover pl-8 pr-3 text-base text-ink outline-none placeholder:text-ink-faint transition-colors focus:border-accent focus:bg-bg sm:text-sm"
           />
         </div>
       </div>
@@ -241,7 +241,7 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="border-t border-border px-2 py-3">
+      <div className="border-t border-border px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <AuthRow enabled={authEnabled} />
         <div className="mt-2 flex flex-col gap-0.5">
           <SidebarLink href="/configurations">
@@ -344,7 +344,7 @@ function ConversationItem({
               }
             }}
             aria-label="Renommer la conversation"
-            className="min-w-0 flex-1 rounded border border-accent bg-bg px-2 py-1 text-sm text-ink outline-none"
+            className="min-w-0 flex-1 rounded border border-accent bg-bg px-2 py-1 text-base text-ink outline-none sm:text-sm"
           />
           <button
             onClick={saveRename}
@@ -388,7 +388,7 @@ function ConversationItem({
             onClick={() => setMenuOpen((v) => !v)}
             aria-label="Actions de la conversation"
             aria-expanded={menuOpen}
-            className={`mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink ${
+            className={`mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink ${
               menuOpen ? "bg-surface-hover text-ink" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             }`}
           >

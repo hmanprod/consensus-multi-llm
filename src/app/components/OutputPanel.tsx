@@ -102,7 +102,7 @@ export function OutputPanel({
       aria-label="Workspace de sortie"
       className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-border bg-bg shadow-lg animate-[slide-in-right_0.2s_ease-out] lg:static lg:h-dvh lg:w-[var(--workspace-w)] lg:shrink-0 lg:animate-none lg:shadow-none"
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-ink">Consensus</p>
           <p className="truncate text-xs text-ink-faint">{run?.question ?? "Chargement…"}</p>
@@ -137,7 +137,7 @@ export function OutputPanel({
         </div>
       </header>
 
-      <nav className="flex gap-1 border-b border-border px-3 pt-2" aria-label="Vues du workspace">
+      <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-2" aria-label="Vues du workspace">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const selected = tab.id === activeTab;
@@ -146,20 +146,20 @@ export function OutputPanel({
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               aria-current={selected ? "page" : undefined}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
                 selected
                   ? "border-accent font-medium text-ink"
                   : "border-transparent text-ink-secondary hover:text-ink"
               }`}
             >
               <Icon size={14} />
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {loading && (
           <div className="space-y-3">
             <Skeleton className="h-4 w-3/4" />

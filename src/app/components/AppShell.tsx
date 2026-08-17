@@ -22,7 +22,7 @@ import { OutputPanel, type OutputPanelTab } from "./OutputPanel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { IconButton } from "./ui/IconButton";
 import { Toast, type ToastTone } from "./ui/Toast";
-import { CloseIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
+import { ChevronDownIcon, CloseIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 type OutputState = { runId: string; activeTab: OutputPanelTab };
@@ -50,6 +50,9 @@ export function AppShell({
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [runKey, setRunKey] = useState(0);
   const abortRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottom = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
   const missing = useMissingProviders(profile, providersStatus);
   const showBanner = !bannerDismissed && missing.length > 0;
@@ -76,6 +79,33 @@ export function AppShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [output]);
 
+  useEffect(() => {
+    if (stickToBottom.current) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, busy]);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    stickToBottom.current = nearBottom;
+    setShowJump(!nearBottom && el.scrollHeight > el.clientHeight);
+  }
+
+  function scrollToBottom() {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    stickToBottom.current = true;
+    setShowJump(false);
+  }
+
+  function fmtTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
+
   async function refreshConversation(id: string) {
     const data = await getConversationData(id);
     if (data) setMessages(data.messages);
@@ -87,6 +117,7 @@ export function AppShell({
     setError(null);
     setOutput(null);
     setMobileNavOpen(false);
+    stickToBottom.current = true;
     await refreshConversation(id);
   }
 
@@ -97,6 +128,7 @@ export function AppShell({
     setError(null);
     setOutput(null);
     setMobileNavOpen(false);
+    stickToBottom.current = true;
   }
 
   async function submit(q: string) {
@@ -193,7 +225,7 @@ export function AppShell({
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+        <header className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border px-3 pt-[env(safe-area-inset-top)]">
           <IconButton
             label="Ouvrir le menu"
             className="lg:hidden"
@@ -230,7 +262,7 @@ export function AppShell({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto overscroll-contain">
           {isEmpty ? (
             <EmptyState
               question={question}
@@ -246,7 +278,8 @@ export function AppShell({
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
               {messages.map((m) =>
                 m.role === "user" ? (
-                  <div key={m.id} className="flex justify-end">
+                  <div key={m.id} className="flex flex-col items-end gap-1">
+                    <span className="text-[11px] leading-none text-ink-faint">{fmtTime(m.createdAt)}</span>
                     <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-surface px-4 py-2.5 text-[15px] leading-relaxed text-ink">
                       {m.content}
                     </div>
@@ -261,18 +294,28 @@ export function AppShell({
                     onDeepen={deepen}
                   />
                 ) : (
-                  <article key={m.id} className="rounded-xl border border-border bg-bg p-5 shadow-sm">
+                  <article key={m.id} className="rounded-xl border border-border bg-bg p-4 shadow-sm sm:p-5">
+                    <p className="mb-2 text-[11px] text-ink-faint">{fmtTime(m.createdAt)}</p>
                     <MarkdownRenderer content={m.content} />
                   </article>
                 )
               )}
               {busy && <Progress key={runKey} active onStop={stopAnalysis} />}
+              {showJump && (
+                <button
+                  onClick={scrollToBottom}
+                  className="sticky bottom-4 z-10 mx-auto flex items-center gap-1.5 rounded-full border border-border bg-bg px-3 py-1.5 text-xs font-medium text-ink-secondary shadow-md transition-colors hover:bg-surface"
+                >
+                  <ChevronDownIcon size={14} />
+                  Nouveaux messages
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {hasConversation && (
-          <div className="border-t border-border p-3 sm:p-4">
+          <div className="border-t border-border px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:pb-4 sm:pt-4">
             <div className="mx-auto max-w-3xl">
               <Composer
                 question={question}
@@ -301,7 +344,7 @@ export function AppShell({
       )}
 
       {toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+        <div className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 sm:bottom-[max(1rem,env(safe-area-inset-bottom))] sm:top-auto">
           <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />
         </div>
       )}
