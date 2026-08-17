@@ -1,9 +1,10 @@
 "use client";
 
 const STEPS = [
-  { label: "Analyse de plusieurs modèles", key: "analyse" },
-  { label: "Comparaison des avis", key: "comparaison" },
-  { label: "Réponse finale", key: "reponse" },
+  { label: "Analyses (A, B, C)", key: "analyses" },
+  { label: "Consolidation orchestrateur", key: "consolidation" },
+  { label: "Révisions des analystes", key: "revisions" },
+  { label: "Analyse finale", key: "finale" },
 ];
 
 export function Steps({ active }: { active?: boolean }) {

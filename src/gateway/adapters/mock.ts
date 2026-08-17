@@ -8,11 +8,8 @@ function estimateTokens(text: string): number {
 
 const ROLES: Record<string, string> = {
   analyst: "Analyste indépendant",
-  consensus: "Modérateur du consensus B2",
   synthesis: "Arbitre final",
   orchestrator: "Orchestrateur",
-  targeted: "Analyste (round ciblé)",
-  critique: "Critique",
 };
 
 export class MockAdapter {
@@ -45,7 +42,7 @@ export class MockAdapter {
   private buildText(role: string, question: string, model: string, isAnalysis: boolean): string {
     const q = question.slice(0, 120).replace(/\s+/g, " ").trim();
     if (!isAnalysis) {
-      return `[mock:${model}] Réponse de rôle ${role.toLowerCase()} pour « ${q} ».\n\nContexte reçu, question classée ${role.toLowerCase() === "orchestrateur" ? "de complexité moyenne, plan : analyse indépendante puis consensus." : "et synthèse prête."}`;
+      return `[mock:${model}] Réponse de rôle ${role.toLowerCase()} pour « ${q} ».\n\nContexte reçu, ${role.toLowerCase() === "orchestrateur" ? "analyse en cours de consolidation." : "synthèse prête."}`;
     }
 
     const hasNumbers = /\d/.test(q);

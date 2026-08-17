@@ -1,6 +1,6 @@
 import type { ModelSpec, Usage } from "./gateway";
 
-export type Profile = "economical" | "balanced" | "custom";
+export type Profile = "economical" | "custom";
 
 export interface OrchestrationConfig {
   profile: Profile;
@@ -15,66 +15,16 @@ export interface OrchestrationConfig {
   minAgreementScore: number;
 }
 
-export type Complexity = "simple" | "moderate" | "complex";
-
-export interface WorkflowPlan {
-  complexity: Complexity;
-  summary: string;
-  focusPoints: string[];
-}
-
-export interface AnalysisResult {
-  analystIndex: number;
+export interface AnalysisOutput {
+  label: string;
+  role: "orchestrator" | "analyst";
+  analystIndex?: number;
   model: ModelSpec;
   text: string;
   usage: Usage;
 }
 
-export interface Contradiction {
-  topic: string;
-  positions: string[];
-  analystIndexes: number[];
-}
-
-export interface ComparisonB1 {
-  convergences: string[];
-  contradictions: Contradiction[];
-  uniqueInsights: Array<{ point: string; analystIndexes: number[] }>;
-}
-
-export type DisagreementType =
-  | "formulation"
-  | "hypothesis"
-  | "factual"
-  | "conclusion_changing";
-
-export interface DisagreementPoint {
-  topic: string;
-  type: DisagreementType;
-  analystIndexes: number[];
-  description: string;
-}
-
-export type ConsensusStatus =
-  | "consensus_reached"
-  | "partial"
-  | "major_disagreement"
-  | "insufficient_info"
-  | "budget_exceeded";
-
-export interface ConsensusB2 {
-  status: ConsensusStatus;
-  score: number;
-  confidence: number;
-  agreements: string[];
-  disagreements: DisagreementPoint[];
-  missingInfo: string[];
-  recommendedAction: string;
-  targetedRoundTriggered: boolean;
-  targetedAnalystIndexes: number[];
-}
-
-export type WorkflowStep = "A0" | "A1" | "B1" | "B2" | "B3" | "C";
+export type WorkflowStep = "A" | "B" | "S" | "R" | "F";
 
 export interface TimelineEntry {
   step: WorkflowStep;
@@ -85,13 +35,11 @@ export interface TimelineEntry {
 }
 
 export interface RunResult {
-  plan: WorkflowPlan;
-  analyses: AnalysisResult[];
-  comparison: ComparisonB1;
-  consensus: ConsensusB2;
-  targetedAnalyses: AnalysisResult[];
-  synthesis: string;
-  synthesisLimits: string[];
+  analysisA: AnalysisOutput;
+  initialAnalyses: AnalysisOutput[];
+  consolidated: AnalysisOutput;
+  revisedAnalyses: AnalysisOutput[];
+  finalSynthesis: AnalysisOutput;
   timeline: TimelineEntry[];
   estimatedCostCents: number;
   actualCostCents: number;

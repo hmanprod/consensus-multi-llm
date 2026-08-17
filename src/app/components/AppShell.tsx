@@ -5,18 +5,17 @@ import Link from "next/link";
 import { Show, UserButton } from "@clerk/nextjs";
 import type { StoredConversation, StoredMessage } from "@/lib/store";
 import type { Profile } from "@/contracts/workflow";
-import { askQuestion, getConversationData, listAllConversations } from "@/app/actions";
+import { getProfile } from "@/config/profiles";
+import { askQuestion, getConversationData, listAllConversations, listProvidersStatus } from "@/app/actions";
 import { RunDetails } from "./RunDetails";
 import { Steps } from "./Steps";
+
+type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 
 const PROFILE_DESCRIPTIONS: Record<Profile, { title: string; subtitle: string }> = {
   economical: {
     title: "Économique",
-    subtitle: "Rapide et peu coûteux, pour les questions simples.",
-  },
-  balanced: {
-    title: "Équilibré",
-    subtitle: "Recommandé pour un bon équilibre entre qualité et coût.",
+    subtitle: "ChatGPT orchestre, Gemini et Kimi analysent en collaboration.",
   },
   custom: {
     title: "Personnalisé",
@@ -27,17 +26,23 @@ const PROFILE_DESCRIPTIONS: Record<Profile, { title: string; subtitle: string }>
 export function AppShell({
   initialConversations,
   authEnabled,
+  providersStatus,
 }: {
   initialConversations: StoredConversation[];
   authEnabled: boolean;
+  providersStatus: ProviderStatus[];
 }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
-  const [profile, setProfile] = useState<Profile>("balanced");
+  const [profile, setProfile] = useState<Profile>("economical");
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const missing = useMissingProviders(profile, providersStatus);
+  const showBanner = !bannerDismissed && missing.length > 0;
 
   async function refreshConversation(id: string) {
     const data = await getConversationData(id);
@@ -90,6 +95,25 @@ export function AppShell({
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
+        {showBanner && (
+          <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm text-amber-800">
+            <span className="flex-1">
+              {missing.length === getProfile(profile).analysts.length + 1
+                ? "Aucune clé API configurée — analyses en mode démo (simulées)."
+                : `Clé API manquante : ${missing.join(", ")} — ces modèles seront simulés (mode démo).`}{" "}
+              <Link href="/providers" className="font-medium underline hover:opacity-80">
+                Configurer
+              </Link>
+            </span>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="shrink-0 rounded px-1.5 text-amber-600 hover:bg-amber-100"
+              aria-label="Fermer la notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto">
           {isEmpty ? (
             <EmptyState
@@ -208,7 +232,6 @@ function Sidebar({
           className="w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           <option value="economical">Économique</option>
-          <option value="balanced">Équilibré</option>
           <option value="custom">Personnalisé</option>
         </select>
         <p className="mt-2 text-xs leading-snug text-ink-secondary">{details.subtitle}</p>
@@ -216,9 +239,8 @@ function Sidebar({
           <div className="mt-2 rounded-lg border border-border bg-bg p-2 text-xs text-ink-secondary">
             <p className="mb-1 font-medium text-ink">{details.title}</p>
             <ul className="list-disc space-y-1 pl-4">
-              <li>Économique : modèles rapides, sans round ciblé.</li>
-              <li>Équilibré : diversité de modèles, consensus systématique.</li>
-              <li>Personnalisé : choix manuel par rôle (à venir).</li>
+              <li>Économique : ChatGPT orchestre, Gemini (B) et Kimi (C) analysent.</li>
+              <li>Personnalisé : choix manuel des modèles par rôle (à venir).</li>
             </ul>
           </div>
         )}
@@ -352,6 +374,15 @@ function Composer({
       {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-600">{error}</p>}
     </div>
   );
+}
+
+function useMissingProviders(profile: Profile, providersStatus: ProviderStatus[]): string[] {
+  const configured = new Set<string>(providersStatus.filter((p) => p.enabled).map((p) => p.provider));
+  const cfg = getProfile(profile);
+  const used = [cfg.orchestrator, ...cfg.analysts]
+    .filter((s) => s.provider !== "mock")
+    .map((s) => s.provider);
+  return [...new Set(used.filter((p) => !configured.has(p)))];
 }
 
 function AuthRow({ enabled }: { enabled: boolean }) {

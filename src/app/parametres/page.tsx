@@ -2,13 +2,16 @@ import Link from "next/link";
 import { isPersistent } from "@/lib/db";
 import { MOCK_MODE } from "@/config/profiles";
 
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
   const rows = [
     { label: "Mode démo (provider mock)", value: MOCK_MODE ? "Actif" : "Inactif" },
     { label: "Persistance", value: isPersistent() ? "Neon PostgreSQL (Prisma)" : "Mémoire (démo)" },
-    { label: "Round ciblé max (MVP)", value: "1" },
-    { label: "Analystes max (MVP)", value: "3" },
-    { label: "Providers", value: "7 (OpenAI, Anthropic, Gemini, DeepSeek, Qwen, Kimi, GLM)" },
+    { label: "Processus", value: "Analyse A → B/C → consolidation → révisions → analyse finale" },
+    { label: "Analystes", value: "2 par défaut (ajoutables)" },
+    { label: "Profils", value: "Économique, Personnalisé" },
+    { label: "Providers", value: "8 (OpenAI, Anthropic, Gemini, DeepSeek, Qwen, Kimi, GLM, OpenRouter)" },
   ];
 
   return (

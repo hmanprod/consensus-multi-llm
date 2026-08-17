@@ -12,7 +12,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Consensus Multi-LLM",
-  description: "Plusieurs modèles LLM analysent votre question, un consensus B2 compare les avis, un arbitre rédige la synthèse.",
+  description: "Plusieurs modèles LLM analysent votre question en collaboration : l'orchestrateur consolide les analyses, puis produit une synthèse finale nuancée.",
 };
 
 export default function RootLayout({

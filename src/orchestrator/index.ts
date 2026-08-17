@@ -1,23 +1,18 @@
 import type {
-  AnalysisResult,
-  Complexity,
-  ConsensusB2,
+  AnalysisOutput,
   OrchestrationConfig,
   RunResult,
   TimelineEntry,
-  WorkflowPlan,
 } from "@/contracts/workflow";
-import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec } from "@/contracts/gateway";
+import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage } from "@/contracts/gateway";
 import { estimateCost, tokensToUsd } from "@/gateway/cost";
-import { compareAnalyses } from "./comparison";
-import { buildConsensus } from "./consensus";
 import {
-  analystPrompt,
-  consensusPrompt,
+  analystAnalysisPrompt,
+  consolidationPrompt,
   describeConfig,
-  orchestratorPrompt,
-  synthesisPrompt,
-  targetedAnalystPrompt,
+  finalSynthesisPrompt,
+  orchestratorAnalysisPrompt,
+  revisionPrompt,
 } from "./prompts";
 
 export interface OrchestratorDeps {
@@ -33,6 +28,10 @@ const WORDS_PER_TOKEN = 0.75;
 
 function roughTokens(text: string): number {
   return Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / WORDS_PER_TOKEN));
+}
+
+function analystLabel(index: number): string {
+  return String.fromCharCode(66 + index); // B, C, D, ...
 }
 
 export function runWorkflow(
@@ -74,93 +73,141 @@ class Orchestrator {
     return res;
   }
 
+  private async safeCall(spec: ModelSpec, messages: ChatMessage[]): Promise<{ text: string; usage: Usage; error?: string }> {
+    try {
+      const res = await this.call(spec, messages);
+      return { text: res.text, usage: res.usage };
+    } catch (err) {
+      const msg = message(err);
+      return {
+        text: `[étape non effectuée : ${msg}]`,
+        usage: { promptTokens: 0, completionTokens: 0 },
+        error: msg,
+      };
+    }
+  }
+
+  private messages(p: { system: string; user: string }): ChatMessage[] {
+    return [
+      { role: "system", content: p.system },
+      { role: "user", content: p.user },
+    ];
+  }
+
   async run(): Promise<RunResult> {
     const started = Date.now();
     const estimatedCostCents = this.estimate();
 
-    // A0 — Compréhension
-    const t0 = Date.now();
-    let plan: WorkflowPlan;
-    try {
-      const { system, user } = orchestratorPrompt(this.question);
-      const res = await this.call(this.config.orchestrator, [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],);
-      plan = parsePlan(res.text) ?? deterministicPlan(this.question);
-    } catch {
-      plan = deterministicPlan(this.question);
-    }
-    this.tick("A0", "Compréhension", "done", Date.now() - t0, plan.summary);
+    // A — Analyse A (orchestrateur)
+    const tA = Date.now();
+    const aRes = await this.safeCall(
+      this.config.orchestrator,
+      this.messages(orchestratorAnalysisPrompt(this.question))
+    );
+    const analysisA: AnalysisOutput = {
+      label: "A",
+      role: "orchestrator",
+      model: this.config.orchestrator,
+      text: aRes.text,
+      usage: aRes.usage,
+    };
+    this.tick("A", "Analyse A (orchestrateur)", aRes.error ? "error" : "done", Date.now() - tA);
 
-    // A1 — Analyses indépendantes en parallèle
-    const t1 = Date.now();
-    const analyses = await Promise.all(
+    // B — Analyses initiales des analystes (parallèle)
+    const tB = Date.now();
+    const initialAnalyses = await Promise.all(
       this.config.analysts.map(async (spec, i) => {
-        try {
-          const { system, user } = analystPrompt(this.question, plan.focusPoints);
-          const res = await this.call(spec, [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],);
-          return { analystIndex: i, model: spec, text: res.text, usage: res.usage };
-        } catch (err) {
-          return {
-            analystIndex: i,
-            model: spec,
-            text: `[analyst #${i + 1} failed: ${message(err)}]`,
-            usage: { promptTokens: 0, completionTokens: 0 },
-          };
-        }
+        const label = analystLabel(i);
+        const res = await this.safeCall(spec, this.messages(analystAnalysisPrompt(this.question, label)));
+        return {
+          label,
+          role: "analyst" as const,
+          analystIndex: i,
+          model: spec,
+          text: res.text,
+          usage: res.usage,
+        };
       })
     );
-    this.tick("A1", "Analyses parallèles", "done", Date.now() - t1, `${analyses.length} analystes`);
+    this.tick("B", "Analyses initiales (analystes)", "done", Date.now() - tB, `${initialAnalyses.length} analystes`);
 
-    // B1 — Comparaison
-    const t2 = Date.now();
-    const comparison = compareAnalyses(analyses);
-    this.tick("B1", "Comparaison", "done", Date.now() - t2, `${comparison.convergences.length} convergences, ${comparison.contradictions.length} contradictions`);
-
-    // B2 — Consensus
-    const t3 = Date.now();
-    let consensus = buildConsensus(analyses, comparison, this.config);
-    consensus = await this.enrichConsensus(consensus, analyses);
-    this.tick("B2", "Consensus", "done", Date.now() - t3, `${consensus.score}/100 — ${consensus.status}`);
-
-    // B3 — Round ciblé (max config.maxRounds)
-    let targetedAnalyses: AnalysisResult[] = [];
-    if (consensus.targetedRoundTriggered && this.config.maxRounds >= 1) {
-      const t4 = Date.now();
-      targetedAnalyses = await this.runTargetedRound(consensus);
-      if (targetedAnalyses.length > 0) {
-        const merged = analyses.map((a) => targetedAnalyses.find((t) => t.analystIndex === a.analystIndex) ?? a);
-        const cmp = compareAnalyses(merged);
-        consensus = buildConsensus(merged, cmp, this.config);
-        this.tick("B3", "Round ciblé", "done", Date.now() - t4, `${targetedAnalyses.length} analystes réexaminés`);
-      } else {
-        this.tick("B3", "Round ciblé", "skipped", 0);
-      }
+    // S — Consolidation par l'orchestrateur : A → AB → ABC → ...
+    const tS = Date.now();
+    let consolidatedText = analysisA.text;
+    let consolidatedLabel = "A";
+    let consolidationError: string | undefined;
+    for (let i = 0; i < this.config.analysts.length; i++) {
+      const fromLabel = consolidatedLabel;
+      const nextLabel = consolidatedLabel + analystLabel(i);
+      const res = await this.safeCall(
+        this.config.orchestrator,
+        this.messages(
+          consolidationPrompt(this.question, fromLabel, nextLabel, consolidatedText, initialAnalyses[i].text)
+        )
+      );
+      consolidatedText = res.text;
+      consolidatedLabel = nextLabel;
+      if (res.error) consolidationError = res.error;
     }
+    const consolidated: AnalysisOutput = {
+      label: consolidatedLabel,
+      role: "orchestrator",
+      model: this.config.orchestrator,
+      text: consolidatedText,
+      usage: { promptTokens: 0, completionTokens: 0 },
+    };
+    this.tick("S", "Consolidation orchestrateur", consolidationError ? "error" : "done", Date.now() - tS, `analyse ${consolidatedLabel}`);
 
-    // C — Synthèse finale
-    const t5 = Date.now();
-    const limits = [
-      ...consensus.missingInfo,
-      ...(this.budget.over ? [`Budget dépassé : coût réel ${this.budget.cents.toFixed(2)} cents (max ${this.config.maxBudgetCents}).`] : []),
+    // R — Révisions des analystes (parallèle) : chaque analyste intègre l'analyse consolidée
+    const tR = Date.now();
+    const revisedAnalyses = await Promise.all(
+      this.config.analysts.map(async (spec, i) => {
+        const label = analystLabel(i);
+        const res = await this.safeCall(
+          spec,
+          this.messages(
+            revisionPrompt(this.question, label, initialAnalyses[i].text, consolidated.label, consolidated.text)
+          )
+        );
+        return {
+          label: `${label}${consolidated.label}`,
+          role: "analyst" as const,
+          analystIndex: i,
+          model: spec,
+          text: res.text,
+          usage: res.usage,
+        };
+      })
+    );
+    this.tick("R", "Révisions des analystes", "done", Date.now() - tR, `${revisedAnalyses.length} révisions`);
+
+    // F — Analyse finale par l'orchestrateur
+    const tF = Date.now();
+    const contributions = [
+      { label: consolidated.label, text: consolidated.text },
+      ...revisedAnalyses.map((r) => ({ label: r.label, text: r.text })),
     ];
-    const { synthesis, synthesisLimits } = await this.synthesize(consensus, analyses, limits);
-    this.tick("C", "Synthèse finale", "done", Date.now() - t5);
+    const fRes = await this.safeCall(
+      this.config.orchestrator,
+      this.messages(finalSynthesisPrompt(this.question, contributions))
+    );
+    const finalSynthesis: AnalysisOutput = {
+      label: "Final",
+      role: "orchestrator",
+      model: this.config.orchestrator,
+      text: fRes.text,
+      usage: fRes.usage,
+    };
+    this.tick("F", "Synthèse finale", fRes.error ? "error" : "done", Date.now() - tF);
 
-    const stoppedEarly = this.budget.over || consensus.status === "budget_exceeded";
+    const stoppedEarly = this.budget.over;
 
     return {
-      plan,
-      analyses,
-      comparison,
-      consensus,
-      targetedAnalyses,
-      synthesis,
-      synthesisLimits,
+      analysisA,
+      initialAnalyses,
+      consolidated,
+      revisedAnalyses,
+      finalSynthesis,
       timeline: this.timeline,
       estimatedCostCents: Math.round(estimatedCostCents * 100) / 100,
       actualCostCents: Math.round(this.budget.cents * 100) / 100,
@@ -172,149 +219,16 @@ class Orchestrator {
 
   private estimate(): number {
     const promptLen = roughTokens(describeConfig(this.config) + this.question);
-    const calls = 1 + this.config.analysts.length + 2 + (this.config.maxRounds >= 1 ? this.config.analysts.length : 0);
-    let total = estimateCost(this.config.orchestrator, promptLen, 200);
-    for (const a of this.config.analysts) total += estimateCost(a, promptLen, 500);
-    total += estimateCost(this.config.consensus, promptLen * 4, 200);
-    total += estimateCost(this.config.synthesis, promptLen * 5, 600);
-    if (this.config.maxRounds >= 1) {
-      for (const a of this.config.analysts) total += estimateCost(a, promptLen * 2, 300);
+    // A(1) + initiales(n) + consolidations(n) + révisions(n) + finale(1)
+    let total = estimateCost(this.config.orchestrator, promptLen, 400);
+    for (const a of this.config.analysts) {
+      total += estimateCost(a, promptLen, 500); // analyse initiale
+      total += estimateCost(this.config.orchestrator, promptLen * 3, 400); // consolidation
+      total += estimateCost(a, promptLen * 4, 400); // révision
     }
-    return total * calls / 100;
+    total += estimateCost(this.config.orchestrator, promptLen * 6, 700); // synthèse finale
+    return total / 100;
   }
-
-  private async enrichConsensus(consensus: ConsensusB2, analyses: AnalysisResult[]): Promise<ConsensusB2> {
-    try {
-      const { system, user } = consensusPrompt(this.question, analyses.map((a) => a.text), consensus.score);
-      const res = await this.call(this.config.consensus, [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],);
-      const parsed = parseConsensusJson(res.text);
-      if (!parsed) return consensus;
-      return {
-        ...consensus,
-        recommendedAction: parsed.recommendedAction ?? consensus.recommendedAction,
-        missingInfo: parsed.missingInfo?.length ? parsed.missingInfo : consensus.missingInfo,
-      };
-    } catch {
-      return consensus;
-    }
-  }
-
-  private async runTargetedRound(consensus: ConsensusB2): Promise<AnalysisResult[]> {
-    const indexes = consensus.targetedAnalystIndexes;
-    if (indexes.length === 0) return [];
-    const description = consensus.disagreements
-      .filter((d) => d.type === "factual" || d.type === "conclusion_changing")
-      .map((d) => d.description)
-      .join(" | ") || consensus.disagreements.map((d) => d.description).join(" | ");
-    return Promise.all(
-      indexes.map(async (idx) => {
-        const spec = this.config.analysts[idx];
-        if (!spec) return null;
-        try {
-          const { system, user } = targetedAnalystPrompt(this.question, description);
-          const res = await this.call(spec, [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],);
-          return { analystIndex: idx, model: spec, text: res.text, usage: res.usage };
-        } catch (err) {
-          return {
-            analystIndex: idx,
-            model: spec,
-            text: `[targeted round #${idx + 1} failed: ${message(err)}]`,
-            usage: { promptTokens: 0, completionTokens: 0 },
-          };
-        }
-      })
-    ).then((r) => r.filter((x): x is AnalysisResult => x !== null));
-  }
-
-  private async synthesize(
-    consensus: ConsensusB2,
-    analyses: AnalysisResult[],
-    limits: string[]
-  ): Promise<{ synthesis: string; synthesisLimits: string[] }> {
-    const summary = [
-      `Statut : ${consensus.status}`,
-      `Score d'accord : ${consensus.score}/100`,
-      ...consensus.agreements.map((a) => `Accord : ${a}`),
-      ...consensus.disagreements.map((d) => `Désaccord (${d.type}) : ${d.description}`),
-    ].join("\n");
-
-    try {
-      const { system, user } = synthesisPrompt(this.question, analyses.map((a) => a.text), summary, limits);
-      const res = await this.call(this.config.synthesis, [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],);
-      return { synthesis: res.text, synthesisLimits: limits };
-    } catch (err) {
-      const fallback = [
-        `Synthèse (arbitre indisponible : ${message(err)})`,
-        summary,
-        ...analyses.map((a, i) => `Analyste ${i + 1} : ${a.text.slice(0, 300)}`),
-        ...(limits.length ? ["Limites :", ...limits] : []),
-      ].join("\n");
-      return { synthesis: fallback, synthesisLimits: limits };
-    }
-  }
-}
-
-function deterministicPlan(question: string): WorkflowPlan {
-  const len = question.length;
-  const complexity: Complexity = len > 400 || /\b(pourquoi|comparer|explique|analyse|contexte|références|sources)\b/i.test(question)
-    ? "complex"
-    : len > 120
-      ? "moderate"
-      : "simple";
-  return {
-    complexity,
-    summary: `Question traitée en mode ${complexity}.`,
-    focusPoints: ["faits", "interprétations", "recommandation"],
-  };
-}
-
-function parsePlan(text: string): WorkflowPlan | null {
-  const json = extractJson(text);
-  if (!json) return null;
-  try {
-    const parsed = JSON.parse(json) as Partial<WorkflowPlan>;
-    if (typeof parsed.summary !== "string") return null;
-    const complexity: Complexity =
-      parsed.complexity === "simple" || parsed.complexity === "moderate" || parsed.complexity === "complex"
-        ? parsed.complexity
-        : "moderate";
-    return {
-      complexity,
-      summary: parsed.summary,
-      focusPoints: Array.isArray(parsed.focusPoints) ? parsed.focusPoints.slice(0, 5) : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseConsensusJson(text: string): { recommendedAction?: string; missingInfo?: string[] } | null {
-  const json = extractJson(text);
-  if (!json) return null;
-  try {
-    const parsed = JSON.parse(json) as { recommendedAction?: string; missingInfo?: string[] };
-    if (typeof parsed.recommendedAction !== "string" && !Array.isArray(parsed.missingInfo)) return null;
-    return {
-      recommendedAction: typeof parsed.recommendedAction === "string" ? parsed.recommendedAction : undefined,
-      missingInfo: Array.isArray(parsed.missingInfo) ? parsed.missingInfo : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function extractJson(text: string): string | null {
-  const match = /{[\s\S]*}/.exec(text);
-  return match ? match[0] : null;
 }
 
 function message(err: unknown): string {

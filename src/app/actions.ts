@@ -10,7 +10,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { getAuthUserId, userStorage } from "@/lib/user-context";
 import type { KnownProvider } from "@/gateway";
 
-const PROFILE_SCHEMA = z.enum(["economical", "balanced", "custom"]);
+const PROFILE_SCHEMA = z.enum(["economical", "custom"]);
 const PROVIDER_SCHEMA = z.enum(KNOWN_PROVIDERS as unknown as [string, ...string[]]);
 
 export type AskResult = {
@@ -57,8 +57,8 @@ export async function askQuestion(input: {
   if (question.length > 2000) throw new Error("question_too_long");
 
   return userStorage.run(await getAuthUserId(), async () => {
-    const profileResult = PROFILE_SCHEMA.safeParse(input.profile ?? "balanced");
-    const profile: Profile = profileResult.success ? profileResult.data : "balanced";
+    const profileResult = PROFILE_SCHEMA.safeParse(input.profile ?? "economical");
+    const profile: Profile = profileResult.success ? profileResult.data : "economical";
     const config = await buildConfig(profile);
 
     await bindStoredKeys();
@@ -77,7 +77,7 @@ export async function askQuestion(input: {
     try {
       const result = await runWorkflow(question, config, { generate });
       await store.setRunResult(run.runId, result);
-      await store.addMessage(conversationId, "assistant", result.synthesis, run.runId);
+      await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, run.runId);
     } catch (err) {
       const message = err instanceof Error ? err.message : "erreur inconnue";
       await store.failRun(run.runId, message);
@@ -121,12 +121,12 @@ export async function listAllConversations() {
 
 export async function getProfileDescription(profile: string) {
   const result = PROFILE_SCHEMA.safeParse(profile);
-  const p: Profile = result.success ? result.data : "balanced";
+  const p: Profile = result.success ? result.data : "economical";
   return describeProfile(p);
 }
 
 export async function getProfiles() {
-  return (["economical", "balanced", "custom"] as const).map((p) => ({
+  return (["economical", "custom"] as const).map((p) => ({
     profile: p,
     config: getProfile(p),
     description: describeProfile(p),

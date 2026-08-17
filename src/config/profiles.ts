@@ -6,40 +6,23 @@ export const MOCK_MODE = process.env.MOCK_MODE === "true" ||
 const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
   economical: {
     profile: "economical",
-    orchestrator: { provider: "gemini", model: "gemini-3.5-flash" },
+    orchestrator: { provider: "openai", model: "chatgpt-5.6" },
     analysts: [
-      { provider: "deepseek", model: "deepseek-v4" },
-      { provider: "glm", model: "glm-5.3" },
+      { provider: "gemini", model: "gemini-3.5-flash" },
       { provider: "kimi", model: "kimi-k3" },
     ],
-    consensus: { provider: "glm", model: "glm-5.3" },
-    synthesis: { provider: "deepseek", model: "deepseek-v4" },
+    consensus: { provider: "openai", model: "chatgpt-5.6" },
+    synthesis: { provider: "openai", model: "chatgpt-5.6" },
     maxRounds: 0,
-    maxBudgetCents: 30,
-    maxTokensPerCall: 1500,
-    timeoutMs: 90_000,
-    minAgreementScore: 65,
-  },
-  balanced: {
-    profile: "balanced",
-    orchestrator: { provider: "anthropic", model: "claude-opus-5" },
-    analysts: [
-      { provider: "openai", model: "chatgpt-5.6" },
-      { provider: "gemini", model: "gemini-3.5-flash" },
-      { provider: "qwen", model: "qwen-3.8-max" },
-    ],
-    consensus: { provider: "anthropic", model: "claude-opus-5" },
-    synthesis: { provider: "anthropic", model: "claude-opus-5" },
-    maxRounds: 1,
-    maxBudgetCents: 80,
-    maxTokensPerCall: 2500,
+    maxBudgetCents: 60,
+    maxTokensPerCall: 2000,
     timeoutMs: 120_000,
     minAgreementScore: 70,
   },
 };
 
 export function getProfile(profile: Profile): OrchestrationConfig {
-  if (profile === "custom") return { ...PROFILES.balanced, profile: "custom" };
+  if (profile === "custom") return { ...PROFILES.economical, profile: "custom" };
   return { ...PROFILES[profile] };
 }
 
@@ -77,12 +60,10 @@ export function describeProfile(profile: Profile): string {
   return [
     `Profil ${profile}`,
     ...(MOCK_MODE ? ["Mode démo actif (provider mock, aucun coût réel)."] : []),
-    line("Orchestrateur", cfg.orchestrator),
+    `Processus collaboratif : Analyse A (orchestrateur) → consolidation → révisions → analyse finale.`,
+    line("Orchestrateur (Analyse A + consolidation + finale)", cfg.orchestrator),
     `Analystes (${cfg.analysts.length})`,
-    ...cfg.analysts.map((a) => `  - ${a.provider}/${a.model}`),
-    line("Consensus B2", cfg.consensus),
-    line("Synthèse", cfg.synthesis),
-    `Round ciblé max : ${cfg.maxRounds}`,
+    ...cfg.analysts.map((a, i) => `  ${String.fromCharCode(66 + i)} — ${a.provider}/${a.model}`),
     `Budget max : ${cfg.maxBudgetCents} cents`,
   ].join("\n");
 }

@@ -131,9 +131,9 @@ export const prismaStore: Store = {
         actualCostCents: result.actualCostCents,
         estimatedCostCents: result.estimatedCostCents,
         durationMs: result.totalLatencyMs,
-        score: result.consensus.score,
-        confidence: result.consensus.confidence,
-        rounds: result.targetedAnalyses.length > 0 ? 1 : 0,
+        score: null,
+        confidence: null,
+        rounds: 0,
       },
     });
     return {

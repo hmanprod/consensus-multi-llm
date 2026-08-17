@@ -1,55 +1,74 @@
 import type { OrchestrationConfig } from "@/contracts/workflow";
 
-export function orchestratorPrompt(question: string): { system: string; user: string } {
+export interface Contribution {
+  label: string;
+  text: string;
+}
+
+export function orchestratorAnalysisPrompt(question: string): { system: string; user: string } {
   return {
     system:
-      "You are the ORCHESTRATOR of a multi-LLM consensus system. " +
-      "Classify the user question and output ONLY a JSON object with fields: " +
-      '{"complexity":"simple|moderate|complex","summary":"one sentence","focusPoints":["...","..."]}.',
+      "You are the ORCHESTRATOR of a multi-LLM collaboration. " +
+      "Produce your OWN independent first analysis of the question (ANALYSE A). " +
+      "Be concrete, distinguish facts from interpretations, use numbers when possible, and state your stance explicitly. Format: bullet list.",
     user: question,
   };
 }
 
-export function analystPrompt(question: string, focusPoints: string[]): { system: string; user: string } {
+export function analystAnalysisPrompt(question: string, label: string): { system: string; user: string } {
   return {
     system:
-      "You are an INDEPENDENT ANALYST. Answer the question yourself, without seeing other analysts. " +
-      "Be concrete, distinguish facts from interpretations, use numbers when possible, " +
-      "and state your final stance explicitly. Format: bullet list.",
-    user: [question, "Focus areas: " + focusPoints.join("; ")].join("\n\n"),
+      `You are an INDEPENDENT ANALYST (ANALYSE ${label}). ` +
+      "Answer the question yourself, without seeing other analysts. " +
+      "Be concrete, distinguish facts from interpretations, use numbers when possible, and state your final stance explicitly. Format: bullet list.",
+    user: question,
   };
 }
 
-export function targetedAnalystPrompt(question: string, disagreement: string): { system: string; user: string } {
-  return {
-    system:
-      "You are an ANALYST in a TARGETED ROUND. Another pass found a disagreement involving your previous answer. " +
-      "Re-examine that specific point, keep what holds, and clearly state whether you revise your stance or hold it. Format: bullet list.",
-    user: [question, "Disagreement to re-examine: " + disagreement].join("\n\n"),
-  };
-}
-
-export function consensusPrompt(question: string, analyses: string[], score: number): { system: string; user: string } {
-  return {
-    system:
-      "You are the CONSENSUS B2 moderator. Based on the independent analyses, output ONLY a JSON object: " +
-      '{"recommendedAction":"next action","missingInfo":["..."],"risks":["..."]}.',
-    user: JSON.stringify({ question, agreementScore: score, analyses }),
-  };
-}
-
-export function synthesisPrompt(
+export function consolidationPrompt(
   question: string,
-  analyses: string[],
-  consensusSummary: string,
-  limits: string[]
+  fromLabel: string,
+  toLabel: string,
+  currentText: string,
+  newText: string
 ): { system: string; user: string } {
   return {
     system:
-      "You are the FINAL ARBITER. Write a clear, nuanced final synthesis in the same language as the question. " +
-      "State the consensus, the remaining disagreements, and the limitations. " +
+      "You are the ORCHESTRATOR. You are merging a new independent analysis into your current consolidated analysis. " +
+      `Build the consolidated analysis ${toLabel} from ${fromLabel} + new analysis. ` +
+      "Keep what holds, resolve contradictions, and produce one coherent merged analysis. Format: bullet list.",
+    user: JSON.stringify({ question, currentAnalysis: currentText, newAnalysis: newText }),
+  };
+}
+
+export function revisionPrompt(
+  question: string,
+  analystLabel: string,
+  myAnalysis: string,
+  consolidatedLabel: string,
+  consolidatedText: string
+): { system: string; user: string } {
+  return {
+    system:
+      "You are an INDEPENDENT ANALYST. You receive the orchestrator's consolidated analysis. " +
+      `Revise your OWN initial analysis (ANALYSE ${analystLabel}) by integrating the consolidated analysis (ANALYSE ${consolidatedLabel}). ` +
+      "Keep what holds in your analysis, incorporate what strengthens it, " +
+      "and clearly mark where you revise your stance or hold it. Format: bullet list.",
+    user: JSON.stringify({ question, myInitialAnalysis: myAnalysis, consolidatedAnalysis: consolidatedText }),
+  };
+}
+
+export function finalSynthesisPrompt(
+  question: string,
+  contributions: Contribution[]
+): { system: string; user: string } {
+  return {
+    system:
+      "You are the ORCHESTRATOR (FINAL SYNTHESIS). Based on the consolidated analysis and the revised analyst analyses, " +
+      "write the FINAL ANALYSIS: a clear, nuanced answer in the same language as the question. " +
+      "Highlight the agreements, the remaining disagreements, and the limitations. " +
       "Use short paragraphs, then a final 'Limites' section.",
-    user: JSON.stringify({ question, analyses, consensus: consensusSummary, limits }),
+    user: JSON.stringify({ question, contributions }),
   };
 }
 
@@ -58,6 +77,5 @@ export function describeConfig(config: OrchestrationConfig): string {
     `Profile: ${config.profile}`,
     `Analysts: ${config.analysts.length}`,
     `Max budget: ${config.maxBudgetCents} cents`,
-    `Min agreement: ${config.minAgreementScore}/100`,
   ].join("\n");
 }

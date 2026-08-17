@@ -9,33 +9,39 @@ import { listSavedConfigs, saveCustomConfig } from "@/app/actions";
 type RoleSpec = { provider: string; model: string };
 type SavedConfig = Awaited<ReturnType<typeof listSavedConfigs>>[number];
 
-const ROLES: Array<{ key: "orchestrator" | "consensus" | "synthesis"; label: string }> = [
-  { key: "orchestrator", label: "Orchestrateur" },
-  { key: "consensus", label: "Consensus B2" },
-  { key: "synthesis", label: "Synthèse finale" },
-];
+function analystName(index: number): string {
+  return `Analyste ${String.fromCharCode(66 + index)}`;
+}
 
 export function ConfigurationsClient({ initial }: { initial: SavedConfig[] }) {
-  const defaultCfg = getProfile("balanced");
+  const defaultCfg = getProfile("economical");
   const [saved, setSaved] = useState(initial);
   const [name, setName] = useState("");
-  const [specs, setSpecs] = useState<Record<string, RoleSpec>>({
-    orchestrator: defaultCfg.orchestrator,
-    analyst0: defaultCfg.analysts[0],
-    analyst1: defaultCfg.analysts[1],
-    analyst2: defaultCfg.analysts[2],
-    consensus: defaultCfg.consensus,
-    synthesis: defaultCfg.synthesis,
-  });
+  const [orchestrator, setOrchestrator] = useState<RoleSpec>(defaultCfg.orchestrator);
+  const [analysts, setAnalysts] = useState<RoleSpec[]>(defaultCfg.analysts);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
-  function setRole(key: string, patch: Partial<RoleSpec>) {
-    setSpecs((s) => {
-      const next = { ...s[key], ...patch };
+  function setOrchestratorPatch(patch: Partial<RoleSpec>) {
+    const next = { ...orchestrator, ...patch };
+    if (patch.provider) next.model = MODELS_BY_PROVIDER[patch.provider][0].slug;
+    setOrchestrator(next);
+  }
+
+  function setAnalyst(index: number, patch: Partial<RoleSpec>) {
+    setAnalysts((list) => {
+      const next = { ...list[index], ...patch };
       if (patch.provider) next.model = MODELS_BY_PROVIDER[patch.provider][0].slug;
-      return { ...s, [key]: next };
+      return list.map((a, i) => (i === index ? next : a));
     });
+  }
+
+  function addAnalyst() {
+    setAnalysts((list) => [...list, { provider: "mock", model: "mock" }]);
+  }
+
+  function removeAnalyst(index: number) {
+    setAnalysts((list) => list.filter((_, i) => i !== index));
   }
 
   async function save(e: React.FormEvent) {
@@ -46,10 +52,8 @@ export function ConfigurationsClient({ initial }: { initial: SavedConfig[] }) {
     try {
       const config: OrchestrationConfig = {
         ...defaultCfg,
-        orchestrator: specs.orchestrator,
-        analysts: [specs.analyst0, specs.analyst1, specs.analyst2],
-        consensus: specs.consensus,
-        synthesis: specs.synthesis,
+        orchestrator,
+        analysts,
       };
       await saveCustomConfig({ name, config });
       setSaved(await listSavedConfigs());
@@ -65,14 +69,13 @@ export function ConfigurationsClient({ initial }: { initial: SavedConfig[] }) {
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Configurations</h1>
       <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-        Trois profils prêts à l&apos;emploi, plus une configuration personnalisée où vous choisissez
-        le modèle de chaque rôle.
+        Deux profils : le profil « Économique » prêt à l&apos;emploi, et une configuration
+        personnalisée où vous choisissez le modèle de chaque rôle.
       </p>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-3">
-        <ProfileCard name="Économique" desc="Rapide et peu coûteux." />
-        <ProfileCard name="Équilibré" desc="Qualité et coût équilibrés." highlight />
-        <ProfileCard name="Personnalisé" desc="Choix manuel par rôle." />
+      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+        <ProfileCard name="Économique" desc="ChatGPT orchestre, Gemini (B) et Kimi (C) analysent en collaboration." highlight />
+        <ProfileCard name="Personnalisé" desc="Choix manuel par rôle, analystes ajoutables (B, C, D…)." />
       </div>
 
       <form onSubmit={save} className="mt-10">
@@ -85,20 +88,45 @@ export function ConfigurationsClient({ initial }: { initial: SavedConfig[] }) {
         />
 
         <div className="mt-6 space-y-5">
-          {ROLES.map(({ key, label }) => (
-            <RolePicker key={key} label={label} spec={specs[key]} onChange={(patch) => setRole(key, patch)} />
-          ))}
           <div>
-            <p className="mb-1.5 text-sm font-medium text-ink">Analystes (3)</p>
+            <p className="mb-1.5 text-sm font-medium text-ink">Orchestrateur (Analyse A + consolidation + finale)</p>
+            <RolePicker
+              label="Orchestrateur"
+              spec={orchestrator}
+              onChange={(patch) => setOrchestratorPatch(patch)}
+            />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-sm font-medium text-ink">Analystes ({analysts.length})</p>
+              <button
+                type="button"
+                onClick={addAnalyst}
+                className="rounded-md border border-border px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface"
+              >
+                + Ajouter un analyste
+              </button>
+            </div>
             <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <RolePicker
-                  key={i}
-                  label={`Analyste ${i + 1}`}
-                  spec={specs[`analyst${i}`]}
-                  onChange={(patch) => setRole(`analyst${i}`, patch)}
-                  compact
-                />
+              {analysts.map((a, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <RolePicker
+                    label={analystName(i)}
+                    spec={a}
+                    onChange={(patch) => setAnalyst(i, patch)}
+                    compact
+                  />
+                  {analysts.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => removeAnalyst(i)}
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-surface hover:text-red-600"
+                    >
+                      Retirer
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -159,7 +187,7 @@ function RolePicker({
 }) {
   const providers = Object.keys(MODELS_BY_PROVIDER);
   return (
-    <div className={compact ? "flex items-center gap-2" : "flex flex-wrap items-center gap-2"}>
+    <div className={compact ? "flex flex-1 items-center gap-2" : "flex flex-wrap items-center gap-2"}>
       <span className={`w-32 shrink-0 text-sm ${compact ? "text-ink-faint" : "font-medium text-ink"}`}>
         {label}
       </span>

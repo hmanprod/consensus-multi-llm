@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listProvidersStatus } from "@/app/actions";
 import { ProvidersClient } from "./ProvidersClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProvidersPage() {
   const providers = await listProvidersStatus();
   return (

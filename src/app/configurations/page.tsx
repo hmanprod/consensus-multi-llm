@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listSavedConfigs } from "@/app/actions";
 import { ConfigurationsClient } from "./ConfigurationsClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function ConfigurationsPage() {
   const saved = await listSavedConfigs();
   return (
