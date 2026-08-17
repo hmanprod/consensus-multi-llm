@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { listProvidersStatus, saveApiKey, testProviderConnection } from "@/app/actions";
-import { PROVIDER_LABELS } from "@/config/models";
+import { MODELS_BY_PROVIDER, PROVIDER_LABELS } from "@/config/models";
+import { Badge } from "@/app/components/ui/Badge";
+import { Button } from "@/app/components/ui/Button";
+import { CheckIcon } from "@/app/components/ui/icons";
 
 export type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
+
+function formatDate(ts: number | null): string | null {
+  if (!ts) return null;
+  return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
 
 export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
   const [providers, setProviders] = useState(initial);
@@ -45,97 +53,94 @@ export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
     <div className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Providers</h1>
       <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-        Ajoutez les clés API des fournisseurs à utiliser. Elles sont chiffrées côté serveur et ne
-        sont jamais stockées en clair.
+        Les clés API sont chiffrées côté serveur et ne sont jamais stockées en clair. Une clé
+        enregistrée active le provider correspondant pour vos analyses.
       </p>
 
       <div className="mt-8 space-y-4">
         {rows.map((p) => (
-          <ProviderRow
+          <ProviderCard
             key={p.provider}
-            provider={p.provider}
             status={p}
             busy={busy === p.provider}
+            lastResult={result?.provider === p.provider ? result : null}
             onSave={(key) => saveKey(p.provider, key)}
             onTest={() => test(p.provider)}
           />
         ))}
       </div>
-
-      {result && (
-        <p className={`mt-4 text-sm ${result.ok ? "text-emerald-600" : "text-red-600"}`}>
-          {result.detail}
-        </p>
-      )}
     </div>
   );
 }
 
-function ProviderRow({
-  provider,
+function ProviderCard({
   status,
   busy,
+  lastResult,
   onSave,
   onTest,
 }: {
-  provider: string;
   status: ProviderStatus;
   busy: boolean;
+  lastResult: { ok: boolean; detail: string } | null;
   onSave: (key: string) => void;
   onTest: () => void;
 }) {
   const [key, setKey] = useState("");
   const enabled = status.enabled;
+  const model = MODELS_BY_PROVIDER[status.provider]?.[0];
 
   return (
-    <div className="rounded-xl border border-border p-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-xl border border-border bg-bg p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-ink">{PROVIDER_LABELS[provider] ?? provider}</span>
-          <span
-            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
-              enabled
-                ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                : "border-border bg-surface text-ink-faint"
-            }`}
-          >
-            {enabled ? "Configuré" : "Non configuré"}
-          </span>
+          <span className="font-medium text-ink">{PROVIDER_LABELS[status.provider] ?? status.provider}</span>
+          {enabled ? (
+            <Badge tone="success">
+              <CheckIcon size={11} />
+              Configuré
+            </Badge>
+          ) : (
+            <Badge tone="neutral">Non configuré</Badge>
+          )}
         </div>
-        {status.maskedKey && <span className="font-mono text-xs text-ink-faint">{status.maskedKey}</span>}
+        <div className="flex items-center gap-3 text-xs text-ink-faint">
+          {model && <span>Modèle : {model.label}</span>}
+          {status.maskedKey && <span className="font-mono">{status.maskedKey}</span>}
+        </div>
       </div>
+
+      {enabled && status.updatedAt && (
+        <p className="mt-2 text-xs text-ink-faint">Dernière mise à jour : {formatDate(status.updatedAt)}</p>
+      )}
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
           onSave(key);
         }}
-        className="mt-3 flex items-center gap-2"
+        className="mt-3 flex flex-wrap items-center gap-2"
       >
         <input
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-…"
+          placeholder={enabled ? "Remplacer la clé…" : "sk-…"}
           autoComplete="off"
+          aria-label={`Clé API ${PROVIDER_LABELS[status.provider] ?? status.provider}`}
           className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
         />
-        <button
-          type="submit"
-          disabled={busy || !key.trim()}
-          className="shrink-0 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          Enregistrer
-        </button>
-        <button
-          type="button"
-          onClick={onTest}
-          disabled={busy || !enabled}
-          className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface disabled:opacity-40"
-        >
+        <Button type="submit" variant="secondary" size="sm" disabled={busy || !key.trim()}>
+          {busy ? "…" : "Enregistrer"}
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={onTest} disabled={busy || !enabled}>
           {busy ? "…" : "Tester"}
-        </button>
+        </Button>
       </form>
+
+      {lastResult && (
+        <p className={`mt-2 text-sm ${lastResult.ok ? "text-success" : "text-danger"}`}>{lastResult.detail}</p>
+      )}
     </div>
   );
 }

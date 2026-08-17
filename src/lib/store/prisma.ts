@@ -32,6 +32,18 @@ export const prismaStore: Store = {
     return { id: c.id, title: c.title, createdAt: c.createdAt.getTime(), updatedAt: c.updatedAt.getTime() };
   },
 
+  async renameConversation(id, title) {
+    const c = await getPrisma().conversation.update({
+      where: { id },
+      data: { title },
+    });
+    return { id: c.id, title: c.title, createdAt: c.createdAt.getTime(), updatedAt: c.updatedAt.getTime() };
+  },
+
+  async deleteConversation(id) {
+    await getPrisma().conversation.delete({ where: { id } });
+  },
+
   async listConversations() {
     const { userId } = await ensureUser();
     const all = await getPrisma().conversation.findMany({

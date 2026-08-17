@@ -36,6 +36,8 @@ export interface StoredConfig {
 
 export interface Store {
   createConversation(title: string): Promise<StoredConversation>;
+  renameConversation(id: string, title: string): Promise<StoredConversation>;
+  deleteConversation(id: string): Promise<void>;
   listConversations(): Promise<StoredConversation[]>;
   getConversation(id: string): Promise<StoredConversation | null>;
   getMessages(conversationId: string): Promise<StoredMessage[]>;

@@ -28,6 +28,22 @@ export const memoryStore: Store = {
     return convo;
   },
 
+  async renameConversation(id, title) {
+    const convo = conversations.get(id);
+    if (!convo) throw new Error("conversation_not_found");
+    convo.title = title;
+    convo.updatedAt = Date.now();
+    return convo;
+  },
+
+  async deleteConversation(id) {
+    conversations.delete(id);
+    messages.delete(id);
+    for (const [key, value] of runs) {
+      if (value.conversationId === id) runs.delete(key);
+    }
+  },
+
   async listConversations() {
     return [...conversations.values()].sort((a, b) => b.updatedAt - a.updatedAt);
   },

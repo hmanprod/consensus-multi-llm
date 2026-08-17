@@ -119,6 +119,23 @@ export async function listAllConversations() {
   });
 }
 
+export async function renameConversation(input: { conversationId: string; title: string }) {
+  return asUser(async () => {
+    const title = input.title.trim();
+    if (!title) throw new Error("title_required");
+    const store = await getStore();
+    return store.renameConversation(input.conversationId, title);
+  });
+}
+
+export async function deleteConversation(input: { conversationId: string }) {
+  return asUser(async () => {
+    const store = await getStore();
+    await store.deleteConversation(input.conversationId);
+    return { ok: true };
+  });
+}
+
 export async function getProfileDescription(profile: string) {
   const result = PROFILE_SCHEMA.safeParse(profile);
   const p: Profile = result.success ? result.data : "economical";
@@ -159,6 +176,7 @@ export async function listProvidersStatus() {
         provider: p,
         enabled: p === "mock" || configured.has(p) || Boolean(envKey),
         maskedKey: cred?.maskedKey ?? null,
+        updatedAt: cred?.updatedAt ?? null,
         source: p === "mock" ? "built-in" : configured.has(p) ? "stored" : envKey ? "env" : null,
       };
     });

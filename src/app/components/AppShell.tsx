@@ -1,27 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Show, UserButton } from "@clerk/nextjs";
 import type { StoredConversation, StoredMessage } from "@/lib/store";
 import type { Profile } from "@/contracts/workflow";
 import { getProfile } from "@/config/profiles";
-import { askQuestion, getConversationData, listAllConversations, listProvidersStatus } from "@/app/actions";
-import { RunDetails } from "./RunDetails";
-import { Steps } from "./Steps";
+import {
+  askQuestion,
+  deleteConversation,
+  getConversationData,
+  listAllConversations,
+  listProvidersStatus,
+  renameConversation,
+} from "@/app/actions";
+import { Sidebar } from "./Sidebar";
+import { EmptyState } from "./EmptyState";
+import { Composer } from "./Composer";
+import { Progress } from "./Progress";
+import { ConsensusSummaryCard } from "./ConsensusSummaryCard";
+import { OutputPanel, type OutputPanelTab } from "./OutputPanel";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { IconButton } from "./ui/IconButton";
+import { Toast, type ToastTone } from "./ui/Toast";
+import { CloseIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
-
-const PROFILE_DESCRIPTIONS: Record<Profile, { title: string; subtitle: string }> = {
-  economical: {
-    title: "Économique",
-    subtitle: "ChatGPT orchestre, Gemini et Kimi analysent en collaboration.",
-  },
-  custom: {
-    title: "Personnalisé",
-    subtitle: "Vous choisissez les modèles pour chaque rôle.",
-  },
-};
+type OutputState = { runId: string; activeTab: OutputPanelTab };
 
 export function AppShell({
   initialConversations,
@@ -40,9 +44,37 @@ export function AppShell({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [output, setOutput] = useState<OutputState | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const [runKey, setRunKey] = useState(0);
+  const abortRef = useRef(false);
 
   const missing = useMissingProviders(profile, providersStatus);
   const showBanner = !bannerDismissed && missing.length > 0;
+  const hasConversation = selectedId !== null && messages.length > 0;
+  const isEmpty = messages.length === 0;
+  const analystCount = getProfile(profile).analysts.length;
+
+  function showToast(message: string, tone: ToastTone = "info") {
+    setToast({ message, tone });
+  }
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!output) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOutput(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [output]);
 
   async function refreshConversation(id: string) {
     const data = await getConversationData(id);
@@ -51,6 +83,10 @@ export function AppShell({
 
   async function selectConversation(id: string) {
     setSelectedId(id);
+    setQuestion("");
+    setError(null);
+    setOutput(null);
+    setMobileNavOpen(false);
     await refreshConversation(id);
   }
 
@@ -59,6 +95,8 @@ export function AppShell({
     setMessages([]);
     setQuestion("");
     setError(null);
+    setOutput(null);
+    setMobileNavOpen(false);
   }
 
   async function submit(q: string) {
@@ -66,312 +104,207 @@ export function AppShell({
     if (!question || busy) return;
     setBusy(true);
     setError(null);
+    abortRef.current = false;
+    setRunKey((k) => k + 1);
     try {
       const res = await askQuestion({ question, profile, conversationId: selectedId ?? undefined });
+      if (abortRef.current) return;
       setSelectedId(res.conversationId);
       await refreshConversation(res.conversationId);
       setConversations(await listAllConversations());
       setQuestion("");
     } catch (err) {
+      if (abortRef.current) return;
       setError(err instanceof Error ? err.message : "Erreur inattendue");
     } finally {
-      setBusy(false);
+      if (!abortRef.current) setBusy(false);
     }
   }
 
-  const hasConversation = selectedId !== null && messages.length > 0;
-  const isEmpty = !hasConversation && messages.length === 0;
+  function stopAnalysis() {
+    abortRef.current = true;
+    setBusy(false);
+    setQuestion("");
+    showToast("Arrêt demandé — le traitement peut continuer côté serveur.", "info");
+  }
+
+  async function handleRename(id: string, title: string) {
+    await renameConversation({ conversationId: id, title });
+    setConversations(await listAllConversations());
+  }
+
+  async function handleDelete(id: string) {
+    await deleteConversation({ conversationId: id });
+    if (selectedId === id) {
+      setSelectedId(null);
+      setMessages([]);
+    }
+    setConversations(await listAllConversations());
+    showToast("Conversation supprimée.", "success");
+  }
+
+  async function copyMessage(content: string) {
+    await navigator.clipboard.writeText(content);
+    showToast("Réponse copiée.", "success");
+  }
+
+  function lastUserQuestion(): string {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    return lastUser?.content ?? "";
+  }
+
+  function regenerate() {
+    const q = lastUserQuestion();
+    if (q) submit(q);
+  }
+
+  function deepen() {
+    const base = lastUserQuestion();
+    if (!base) return;
+    submit(
+      `Approfondissez l'analyse précédente.\n\nQuestion d'origine : ${base}\n\nCreusez les points encore incertains, évaluez les hypothèses et précisez les recommandations.`
+    );
+  }
+
+  function openOutput(runId: string, activeTab: OutputPanelTab = "summary") {
+    setOutput({ runId, activeTab });
+  }
+
+  function closeOutput() {
+    setOutput(null);
+  }
+
+  const selectedTitle = conversations.find((c) => c.id === selectedId)?.title ?? "";
 
   return (
-    <div className="flex h-dvh">
+    <div className="flex h-dvh overflow-hidden">
       <Sidebar
         conversations={conversations}
         selectedId={selectedId}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
         onSelect={selectConversation}
         onNew={newConversation}
-        profile={profile}
-        setProfile={setProfile}
+        onRename={handleRename}
+        onDelete={handleDelete}
         authEnabled={authEnabled}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+          <IconButton
+            label="Ouvrir le menu"
+            className="lg:hidden"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <MenuIcon size={16} />
+          </IconButton>
+          <h1 className="min-w-0 truncate text-sm font-medium text-ink">
+            {hasConversation ? selectedTitle : "Nouvelle conversation"}
+          </h1>
+          <button
+            onClick={newConversation}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface"
+          >
+            <PlusIcon size={13} />
+            Nouvelle
+          </button>
+        </header>
+
         {showBanner && (
-          <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm text-amber-800">
+          <div className="flex items-center gap-2 border-b border-warning/30 bg-warning-soft px-4 py-2 text-sm text-warning">
+            <InfoIcon size={15} className="shrink-0" />
             <span className="flex-1">
               {missing.length === getProfile(profile).analysts.length + 1
-                ? "Aucune clé API configurée — analyses en mode démo (simulées)."
-                : `Clé API manquante : ${missing.join(", ")} — ces modèles seront simulés (mode démo).`}{" "}
-              <Link href="/providers" className="font-medium underline hover:opacity-80">
-                Configurer
-              </Link>
+                ? "Mode démo actif · Les analyses sont simulées"
+                : `Clé API manquante : ${missing.join(", ")} — modèle simulé`}
             </span>
-            <button
-              onClick={() => setBannerDismissed(true)}
-              className="shrink-0 rounded px-1.5 text-amber-600 hover:bg-amber-100"
-              aria-label="Fermer la notification"
-            >
-              ✕
-            </button>
+            <Link href="/providers" className="shrink-0 font-medium underline hover:opacity-80">
+              Configurer les providers
+            </Link>
+            <IconButton label="Fermer la notification" onClick={() => setBannerDismissed(true)}>
+              <CloseIcon size={14} />
+            </IconButton>
           </div>
         )}
+
         <div className="flex-1 overflow-y-auto">
           {isEmpty ? (
             <EmptyState
-              onSubmit={submit}
-              busy={busy}
               question={question}
               setQuestion={setQuestion}
+              onSubmit={() => submit(question)}
+              busy={busy}
+              onStop={stopAnalysis}
               profile={profile}
+              setProfile={setProfile}
+              analystCount={analystCount}
             />
           ) : (
-            <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-8">
-              {busy && !hasConversation && (
-                <div className="mb-2">
-                  <Steps active />
-                </div>
+            <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
+              {messages.map((m) =>
+                m.role === "user" ? (
+                  <div key={m.id} className="flex justify-end">
+                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-surface px-4 py-2.5 text-[15px] leading-relaxed text-ink">
+                      {m.content}
+                    </div>
+                  </div>
+                ) : m.runId ? (
+                  <ConsensusSummaryCard
+                    key={m.id}
+                    content={m.content}
+                    onCopy={() => copyMessage(m.content)}
+                    onOpenOutput={() => openOutput(m.runId!)}
+                    onRegenerate={regenerate}
+                    onDeepen={deepen}
+                  />
+                ) : (
+                  <article key={m.id} className="rounded-xl border border-border bg-bg p-5 shadow-sm">
+                    <MarkdownRenderer content={m.content} />
+                  </article>
+                )
               )}
-              {messages.map((m) => (
-                <article key={m.id}>
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-faint">
-                    {m.role === "user" ? "Vous" : "Réponse finale"}
-                  </p>
-                  <pre className="whitespace-pre-wrap font-sans text-[15px] leading-relaxed text-ink">
-                    {m.content}
-                  </pre>
-                  {m.role === "assistant" && m.runId && <RunDetails runId={m.runId} />}
-                </article>
-              ))}
-              {busy && (
-                <div className="flex items-center gap-2 text-sm text-ink-secondary">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                  Plusieurs modèles analysent votre question…
-                </div>
-              )}
+              {busy && <Progress key={runKey} active onStop={stopAnalysis} />}
             </div>
           )}
         </div>
 
         {hasConversation && (
-          <Composer
-            question={question}
-            setQuestion={setQuestion}
-            onSubmit={submit}
-            busy={busy}
-            error={error}
-          />
-        )}
-        {!isEmpty && error && (
-          <p className="px-6 pb-2 text-center text-xs text-red-600">{error}</p>
+          <div className="border-t border-border p-3 sm:p-4">
+            <div className="mx-auto max-w-3xl">
+              <Composer
+                question={question}
+                setQuestion={setQuestion}
+                onSubmit={() => submit(question)}
+                busy={busy}
+                onStop={stopAnalysis}
+                profile={profile}
+                setProfile={setProfile}
+                analystCount={analystCount}
+              />
+              {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+            </div>
+          </div>
         )}
       </main>
-    </div>
-  );
-}
 
-function Sidebar({
-  conversations,
-  selectedId,
-  onSelect,
-  onNew,
-  profile,
-  setProfile,
-  authEnabled,
-}: {
-  conversations: StoredConversation[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onNew: () => void;
-  profile: Profile;
-  setProfile: (p: Profile) => void;
-  authEnabled: boolean;
-}) {
-  const [showProfileDetails, setShowProfileDetails] = useState(false);
-  const details = PROFILE_DESCRIPTIONS[profile];
-
-  return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface">
-      <AuthRow enabled={authEnabled} />
-      <button onClick={onNew} className="flex items-center gap-2 px-4 pb-3 pt-4 text-left">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-sm font-semibold text-bg">
-          +
-        </span>
-        <span className="text-sm font-medium text-ink">Nouvelle conversation</span>
-      </button>
-
-      <nav className="flex-1 overflow-y-auto px-2 pb-4">
-        <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-ink-faint">
-          Conversations récentes
-        </p>
-        {conversations.length === 0 && (
-          <p className="px-3 py-2 text-xs text-ink-faint">Aucune conversation pour l&apos;instant.</p>
-        )}
-        {conversations.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => onSelect(c.id)}
-            className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-              c.id === selectedId
-                ? "bg-bg font-medium text-ink shadow-sm"
-                : "text-ink-secondary hover:bg-surface-hover hover:text-ink"
-            }`}
-          >
-            {c.title}
-          </button>
-        ))}
-      </nav>
-
-      <div className="border-t border-border p-3">
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-faint">Configuration</p>
-        <label className="mb-1 block text-sm font-medium text-ink">Profil</label>
-        <select
-          value={profile}
-          onChange={(e) => {
-            setProfile(e.target.value as Profile);
-            setShowProfileDetails(false);
-          }}
-          className="w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
-        >
-          <option value="economical">Économique</option>
-          <option value="custom">Personnalisé</option>
-        </select>
-        <p className="mt-2 text-xs leading-snug text-ink-secondary">{details.subtitle}</p>
-        {showProfileDetails && (
-          <div className="mt-2 rounded-lg border border-border bg-bg p-2 text-xs text-ink-secondary">
-            <p className="mb-1 font-medium text-ink">{details.title}</p>
-            <ul className="list-disc space-y-1 pl-4">
-              <li>Économique : ChatGPT orchestre, Gemini (B) et Kimi (C) analysent.</li>
-              <li>Personnalisé : choix manuel des modèles par rôle (à venir).</li>
-            </ul>
-          </div>
-        )}
-        <button
-          onClick={() => setShowProfileDetails((v) => !v)}
-          className="mt-2 text-xs font-medium text-accent hover:underline"
-        >
-          {showProfileDetails ? "Masquer les détails" : "Voir les détails"}
-        </button>
-
-        <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
-          <Link href="/configurations" className="rounded-md px-2 py-1.5 text-left text-sm text-ink-secondary hover:bg-surface-hover">
-            Configurations
-          </Link>
-          <Link href="/providers" className="rounded-md px-2 py-1.5 text-left text-sm text-ink-secondary hover:bg-surface-hover">
-            Providers
-          </Link>
-          <Link href="/parametres" className="rounded-md px-2 py-1.5 text-left text-sm text-ink-secondary hover:bg-surface-hover">
-            Paramètres
-          </Link>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function EmptyState({
-  onSubmit,
-  busy,
-  question,
-  setQuestion,
-  profile,
-}: {
-  onSubmit: (q: string) => void;
-  busy: boolean;
-  question: string;
-  setQuestion: (s: string) => void;
-  profile: Profile;
-}) {
-  const details = PROFILE_DESCRIPTIONS[profile];
-  const canSubmit = question.trim().length > 0 && !busy;
-
-  return (
-    <div className="flex h-full flex-col items-center justify-center px-6">
-      <div className="w-full max-w-xl">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Posez votre question</h1>
-        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-          Plusieurs modèles analysent votre question, comparent leurs réponses et produisent une
-          synthèse fiable.
-        </p>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (canSubmit) onSubmit(question);
-          }}
-          className="mt-6"
-        >
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            rows={4}
-            placeholder="Que souhaitez-vous analyser ?"
-            className="w-full resize-none rounded-xl border border-border bg-bg p-4 text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-accent"
-            autoFocus
-          />
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-sm text-ink-secondary">
-              Mode <span className="font-medium text-ink">{details.title}</span>
-            </p>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors ${
-                canSubmit
-                  ? "bg-accent text-white hover:bg-accent/90"
-                  : "cursor-not-allowed bg-surface text-ink-faint"
-              }`}
-            >
-              {busy ? "Analyse en cours…" : "Analyser la question"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function Composer({
-  question,
-  setQuestion,
-  onSubmit,
-  busy,
-  error,
-}: {
-  question: string;
-  setQuestion: (s: string) => void;
-  onSubmit: (q: string) => void;
-  busy: boolean;
-  error: string | null;
-}) {
-  const canSubmit = question.trim().length > 0 && !busy;
-  return (
-    <div className="border-t border-border p-4">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit) onSubmit(question);
-        }}
-        className="mx-auto flex max-w-2xl items-end gap-2"
-      >
-        <textarea
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          rows={1}
-          placeholder="Posez votre question…"
-          className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-xl border border-border bg-bg px-4 py-2.5 text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+      {output && (
+        <OutputPanel
+          key={output.runId}
+          runId={output.runId}
+          activeTab={output.activeTab}
+          onTabChange={(tab) => setOutput((o) => (o ? { ...o, activeTab: tab } : o))}
+          onClose={closeOutput}
         />
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
-            canSubmit
-              ? "bg-accent text-white hover:bg-accent/90"
-              : "cursor-not-allowed bg-surface text-ink-faint"
-          }`}
-        >
-          {busy ? "…" : "Envoyer"}
-        </button>
-      </form>
-      {error && <p className="mx-auto mt-2 max-w-2xl text-xs text-red-600">{error}</p>}
+      )}
+
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -383,32 +316,4 @@ function useMissingProviders(profile: Profile, providersStatus: ProviderStatus[]
     .filter((s) => s.provider !== "mock")
     .map((s) => s.provider);
   return [...new Set(used.filter((p) => !configured.has(p)))];
-}
-
-function AuthRow({ enabled }: { enabled: boolean }) {
-  if (!enabled) {
-    return (
-      <div className="flex items-center gap-2 px-4 pt-4">
-        <span className="rounded-md border border-border bg-bg px-2 py-0.5 text-xs font-medium text-ink-faint">
-          Mode démo
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div className="border-b border-border px-4 py-3">
-      <Show when="signed-in">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <UserButton />
-          </div>
-        </div>
-      </Show>
-      <Show when="signed-out">
-        <Link href="/sign-in" className="block w-full rounded-lg border border-border bg-bg px-3 py-2 text-center text-sm font-medium text-ink hover:bg-surface-hover">
-          Se connecter
-        </Link>
-      </Show>
-    </div>
-  );
 }
