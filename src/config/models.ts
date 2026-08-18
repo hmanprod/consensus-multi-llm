@@ -17,6 +17,54 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
   mock: [{ label: "Mock (démo)", slug: "mock" }],
 };
 
+export interface ProviderPlatform {
+  url: string;
+  hint: string;
+}
+
+export const PROVIDER_PLATFORMS: Record<string, ProviderPlatform> = {
+  openai: {
+    url: "https://platform.openai.com/api-keys",
+    hint: "Créez ou connectez-vous à votre compte OpenAI, puis générez une clé API dans le tableau de bord.",
+  },
+  anthropic: {
+    url: "https://console.anthropic.com/",
+    hint: "Créez ou connectez-vous à votre compte Anthropic, puis générez une clé API depuis la console.",
+  },
+  gemini: {
+    url: "https://aistudio.google.com/apikey",
+    hint: "Créez ou connectez-vous à votre compte Google, puis générez une clé API Gemini depuis Google AI Studio.",
+  },
+  deepseek: {
+    url: "https://platform.deepseek.com/",
+    hint: "Créez ou connectez-vous à votre compte DeepSeek, puis générez une clé API depuis la plateforme.",
+  },
+  qwen: {
+    url: "https://dashscope.console.aliyun.com/apiKey",
+    hint: "Créez ou connectez-vous à votre compte Alibaba Cloud, puis générez une clé API depuis le portail DashScope.",
+  },
+  kimi: {
+    url: "https://platform.moonshot.ai/",
+    hint: "Créez ou connectez-vous à votre compte Moonshot, puis générez une clé API depuis la plateforme.",
+  },
+  glm: {
+    url: "https://open.bigmodel.cn/",
+    hint: "Créez ou connectez-vous à votre compte Zhipu AI, puis générez une clé API depuis la console BigModel.",
+  },
+  xai: {
+    url: "https://console.x.ai/",
+    hint: "Créez ou connectez-vous à votre compte xAI, puis générez une clé API depuis la console.",
+  },
+  meta: {
+    url: "https://www.llama.com/",
+    hint: "Créez ou connectez-vous à votre compte Meta, puis générez une clé API depuis la plateforme Meta Model API.",
+  },
+  openrouter: {
+    url: "https://openrouter.ai/keys",
+    hint: "Créez ou connectez-vous à votre compte OpenRouter, puis générez une clé API depuis le tableau de bord.",
+  },
+};
+
 export const PROVIDER_LABELS: Record<string, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",

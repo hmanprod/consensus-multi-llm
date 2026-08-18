@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { listProvidersStatus, saveApiKey, testProviderConnection } from "@/app/actions";
-import { MODELS_BY_PROVIDER, PROVIDER_LABELS } from "@/config/models";
+import { MODELS_BY_PROVIDER, PROVIDER_LABELS, PROVIDER_PLATFORMS } from "@/config/models";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
-import { CheckIcon, ChevronDownIcon } from "@/app/components/ui/icons";
+import { CheckIcon, ChevronDownIcon, LinkIcon } from "@/app/components/ui/icons";
 
 export type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 
@@ -176,15 +176,18 @@ function ConfiguredProvider({
       </div>
 
       {showReplace && (
-        <KeyForm
-          label={`Remplacer la clé ${PROVIDER_LABELS[status.provider]}`}
-          placeholder="sk-…"
-          busy={busy}
-          lastResult={lastResult}
-          onSave={onSave}
-          value={key}
-          onChange={setKey}
-        />
+        <>
+          <PlatformHelp provider={status.provider} />
+          <KeyForm
+            label={`Remplacer la clé ${PROVIDER_LABELS[status.provider]}`}
+            placeholder="sk-…"
+            busy={busy}
+            lastResult={lastResult}
+            onSave={onSave}
+            value={key}
+            onChange={setKey}
+          />
+        </>
       )}
     </div>
   );
@@ -232,16 +235,38 @@ function AvailableProvider({
       </button>
 
       {open && (
-        <KeyForm
-          label={`Clé API ${PROVIDER_LABELS[status.provider]}`}
-          placeholder="sk-…"
-          busy={busy}
-          lastResult={lastResult}
-          onSave={onSave}
-          value={key}
-          onChange={setKey}
-        />
+        <>
+          <PlatformHelp provider={status.provider} />
+          <KeyForm
+            label={`Clé API ${PROVIDER_LABELS[status.provider]}`}
+            placeholder="sk-…"
+            busy={busy}
+            lastResult={lastResult}
+            onSave={onSave}
+            value={key}
+            onChange={setKey}
+          />
+        </>
       )}
+    </div>
+  );
+}
+
+function PlatformHelp({ provider }: { provider: string }) {
+  const platform = PROVIDER_PLATFORMS[provider];
+  if (!platform) return null;
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-xs leading-relaxed text-ink-secondary">
+      <p>{platform.hint}</p>
+      <a
+        href={platform.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1.5 inline-flex items-center gap-1 font-medium text-accent hover:underline"
+      >
+        <LinkIcon size={13} />
+        Accéder à la plateforme {PROVIDER_LABELS[provider]}
+      </a>
     </div>
   );
 }
