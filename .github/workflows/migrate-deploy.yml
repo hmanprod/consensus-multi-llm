@@ -15,6 +15,8 @@ jobs:
     name: prisma migrate deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,12 +31,8 @@ jobs:
         run: npm ci
 
       - name: Appliquer les migrations Neon
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate deploy
 
       - name: Vérifier l'état des migrations
         if: always()
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma migrate status
