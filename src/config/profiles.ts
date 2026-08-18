@@ -1,14 +1,15 @@
 import type { OrchestrationConfig, Profile } from "@/contracts/workflow";
 
 export const MOCK_MODE = process.env.MOCK_MODE === "true" ||
-  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY);
+  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY && !process.env.MODEL_API_KEY && !process.env.KIMI_API_KEY);
 
 const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
   economical: {
     profile: "economical",
     orchestrator: { provider: "openai", model: "chatgpt-5.6" },
     analysts: [
-      { provider: "gemini", model: "gemini-3.5-flash" },
+      { provider: "gemini", model: "gemini-3.7-flash" },
+      { provider: "xai", model: "grok-4.6" },
       { provider: "kimi", model: "kimi-k3" },
     ],
     consensus: { provider: "openai", model: "chatgpt-5.6" },
@@ -23,8 +24,11 @@ const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
     profile: "best",
     orchestrator: { provider: "openai", model: "chatgpt-5.6" },
     analysts: [
-      { provider: "anthropic", model: "claude-opus-5" },
-      { provider: "gemini", model: "gemini-3.5-flash" },
+      { provider: "openai", model: "chatgpt-5.6" },
+      { provider: "gemini", model: "gemini-3.7-flash" },
+      { provider: "meta", model: "muse-spark-1.2" },
+      { provider: "xai", model: "grok-4.6" },
+      { provider: "kimi", model: "kimi-k3" },
     ],
     consensus: { provider: "openai", model: "chatgpt-5.6" },
     synthesis: { provider: "openai", model: "chatgpt-5.6" },

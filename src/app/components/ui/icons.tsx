@@ -242,8 +242,18 @@ export function UserIcon(props: IconProps) {
 export function ClockIcon(props: IconProps) {
   return (
     <Icon {...props}>
+      <path d="M12 6v6l4 2" />
       <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
+    </Icon>
+  );
+}
+
+export function LinkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 15l6-6" />
+      <path d="M11 6.5l1.3-1.3a3 3 0 0 1 4.2 4.2l-2 2" />
+      <path d="M13 17.5l-1.3 1.3a3 3 0 0 1-4.2-4.2l2-2" />
     </Icon>
   );
 }

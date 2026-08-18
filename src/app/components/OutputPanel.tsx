@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { StoredRun } from "@/lib/store";
 import type { ConsensusReport, TimelineEntry } from "@/contracts/workflow";
+import type { AnalystDossier } from "@/contracts/research";
 import { parseConsensusReport } from "@/lib/consensus-report";
 import { getRunData } from "@/app/actions";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -19,13 +20,15 @@ import {
   DownloadIcon,
   GaugeIcon,
   LayersIcon,
+  LinkIcon,
 } from "./ui/icons";
 
-export type OutputPanelTab = "summary" | "comparison" | "workflow" | "metrics";
+export type OutputPanelTab = "summary" | "comparison" | "workflow" | "metrics" | "sources";
 
 const TABS: { id: OutputPanelTab; label: string; icon: typeof ColumnsIcon }[] = [
   { id: "summary", label: "Synthèse", icon: ColumnsIcon },
   { id: "comparison", label: "Comparaison", icon: ColumnsIcon },
+  { id: "sources", label: "Sources", icon: LinkIcon },
   { id: "workflow", label: "Workflow", icon: LayersIcon },
   { id: "metrics", label: "Métriques", icon: GaugeIcon },
 ];
@@ -187,6 +190,10 @@ export function OutputPanel({
           <ComparisonView run={run} />
         )}
 
+        {!loading && run?.result && activeTab === "sources" && (
+          <SourcesView run={run} />
+        )}
+
         {!loading && run?.result && activeTab === "workflow" && (
           <WorkflowView run={run} />
         )}
@@ -245,6 +252,19 @@ function SummaryView({ run }: { run: StoredRun }) {
           <ReportSection title="Points d'accord" items={report.agreements} />
           <ReportSection title="Points de désaccord" items={report.disagreements} />
           <ReportSection title="Limites" items={report.limitations} />
+          {report.unverified && report.unverified.length > 0 && (
+            <ReportSection title="Informations non vérifiées" items={report.unverified} />
+          )}
+          {report.sources && report.sources.length > 0 && (
+            <div>
+              <SectionTitle>Sources</SectionTitle>
+              <ul className="space-y-1.5 text-sm">
+                {report.sources.map((item, i) => (
+                  <SourceLink key={i} item={item} />
+                ))}
+              </ul>
+            </div>
+          )}
           <ReportSection title="Prochaine étape" items={report.nextSteps} />
 
           <Accordion title="Synthèse complète (Markdown)">
@@ -287,6 +307,180 @@ const CONFIDENCE_LABEL: Record<"low" | "medium" | "high", string> = {
 function ConfidenceBadge({ confidence }: { confidence: "low" | "medium" | "high" }) {
   const tone = confidence === "high" ? "success" : confidence === "low" ? "warning" : "neutral";
   return <Badge tone={tone}>{CONFIDENCE_LABEL[confidence]}</Badge>;
+}
+
+function ModeBadge({ mode }: { mode: AnalystDossier["mode"] }) {
+  const map: Record<AnalystDossier["mode"], { label: string; tone: "success" | "neutral" | "warning" }> = {
+    native: { label: "Recherche native", tone: "success" },
+    mock: { label: "Démo (mock)", tone: "warning" },
+    disabled: { label: "Recherche désactivée", tone: "neutral" },
+  };
+  const m = map[mode] ?? map.disabled;
+  return <Badge tone={m.tone}>{m.label}</Badge>;
+}
+
+function hostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function SourceLink({ item }: { item: string }) {
+  const url = item.startsWith("http") ? item : null;
+  if (!url) {
+    return <li className="text-sm leading-relaxed text-ink-secondary">{item}</li>;
+  }
+  return (
+    <li>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-baseline gap-1.5 text-sm text-ink underline underline-offset-2 hover:text-accent"
+      >
+        <LinkIcon size={13} className="shrink-0 translate-y-0.5" />
+        <span className="min-w-0">{url}</span>
+      </a>
+    </li>
+  );
+}
+
+function SourcesView({ run }: { run: StoredRun }) {
+  const r = run.result!;
+  const analyses = r.initialAnalyses;
+  const withDossier = analyses.filter((a) => a.dossier);
+  const sourceIds = (dossier: AnalystDossier) => new Map(dossier.sources.map((s) => [s.id, s]));
+  const total = analyses.reduce((acc, a) => acc + (a.dossier?.sources.length ?? 0), 0);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-2">
+        <StatCard label="Sources" value={String(total)} />
+        <StatCard label="Analystes avec recherche" value={String(withDossier.length)} />
+        <StatCard
+          label="Preuves"
+          value={String(analyses.reduce((acc, a) => acc + (a.dossier?.evidence.length ?? 0), 0))}
+        />
+      </div>
+
+      {analyses.map((a) => {
+        const dossier = a.dossier;
+        if (!dossier) return null;
+        const byId = sourceIds(dossier);
+        return (
+          <div key={a.label} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-medium text-ink">{a.label}</span>
+              <span className="text-xs text-ink-faint">{a.model.provider}/{a.model.model}</span>
+              <ModeBadge mode={dossier.mode} />
+            </div>
+
+            {dossier.queries.length > 0 && (
+              <div>
+                <SectionTitle>Requêtes de recherche</SectionTitle>
+                <ul className="space-y-1 text-xs text-ink-secondary">
+                  {dossier.queries.map((q, i) => (
+                    <li key={i} className="truncate">“{q}”</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {dossier.sources.length > 0 && (
+              <div>
+                <SectionTitle>Sources ({dossier.sources.length})</SectionTitle>
+                <ul className="space-y-1.5">
+                  {dossier.sources.map((s) => (
+                    <li key={s.id}>
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group inline-flex w-full items-baseline gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-surface-hover"
+                      >
+                        <LinkIcon size={13} className="shrink-0 translate-y-0.5 text-ink-faint" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-ink">{s.title || s.url}</span>
+                          <span className="block text-[11px] text-ink-faint">{hostname(s.url)}</span>
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {dossier.evidence.length > 0 && (
+              <div>
+                <SectionTitle>Preuves ({dossier.evidence.length})</SectionTitle>
+                <ul className="space-y-1.5">
+                  {dossier.evidence.map((ev) => (
+                    <li key={ev.id} className="rounded-md border border-border bg-surface px-2.5 py-2 text-xs">
+                      <p className="leading-relaxed text-ink-secondary">{excerpt(ev.claim, 180)}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <Badge tone={ev.confidence === "high" ? "success" : ev.confidence === "low" ? "warning" : "neutral"}>
+                          {ev.confidence}
+                        </Badge>
+                        {ev.sourceIds.map((id) => {
+                          const src = byId.get(id);
+                          if (!src) return null;
+                          return (
+                            <a
+                              key={id}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-ink underline underline-offset-2 hover:text-accent"
+                            >
+                              <LinkIcon size={11} />
+                              {hostname(src.url)}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {dossier.uncertainties.length > 0 && (
+              <div>
+                <SectionTitle>Incertitudes ({dossier.uncertainties.length})</SectionTitle>
+                <ul className="space-y-1 text-xs text-ink-secondary">
+                  {dossier.uncertainties.map((u, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
+                      <span>{u}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {r.consolidated.dossier && r.consolidated.dossier.sources.length > 0 && (
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-medium text-ink">{r.consolidated.label}</span>
+            <span className="text-xs text-ink-faint">Sources consolidées (provenance préservée)</span>
+            <ModeBadge mode={r.consolidated.dossier.mode} />
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {r.consolidated.dossier.sources.map((s) => (
+              <li key={s.id}>
+                <SourceLink item={s.url} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ComparisonView({ run }: { run: StoredRun }) {

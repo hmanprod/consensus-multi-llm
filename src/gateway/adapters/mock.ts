@@ -1,4 +1,6 @@
 import type { GenerationResult, GenerationRequest } from "@/contracts/gateway";
+import type { ResearchEvidence, ResearchResult, ResearchSource } from "@/contracts/research";
+import { toResearchResult, uid } from "./research-utils";
 
 const WORDS_PER_TOKEN = 0.75;
 
@@ -28,6 +30,42 @@ function detectRole(system: string): "analyst" | "consensus" | "synthesis" | "or
   return "analyst";
 }
 
+function buildMockResearch(questionInput: string, policy?: { maxSources?: number }): ResearchResult {
+  const q = cleanQuestion(questionInput);
+  const words = q.split(/\s+/).filter(Boolean).slice(0, 4);
+  const topic = words.length ? words.join("-").toLowerCase().replace(/[^a-z0-9-]/g, "") : "sujet";
+  const maxSources = policy?.maxSources ?? 3;
+
+  const sources: ResearchSource[] = [];
+  const templates = [
+    { domain: "rapport-institutionnel", title: "Rapport officiel sur le sujet", sourceType: "primary" },
+    { domain: "analyse-sectorielle", title: "Analyse sectorielle indépendante", sourceType: "analysis" },
+    { domain: "article-expert", title: "Publication experte de référence", sourceType: "secondary" },
+  ];
+  for (let i = 0; i < Math.min(maxSources, templates.length); i++) {
+    const t = templates[i];
+    sources.push({
+      id: uid("src"),
+      url: `https://demo.consensus.local/research/${t.domain}/${topic}`,
+      title: t.title,
+      excerpt: `Extrait de source ${i + 1} illustrant le contexte de « ${q} » (donnée synthétique de démonstration).`,
+      provider: "mock",
+      sourceType: t.sourceType as ResearchSource["sourceType"],
+      retrievedAt: new Date().toISOString(),
+      accessible: true,
+    });
+  }
+
+  const evidence: ResearchEvidence[] = sources.map((s) => ({
+    id: uid("ev"),
+    claim: s.excerpt.slice(0, 120),
+    sourceIds: [s.id],
+    confidence: "medium",
+  }));
+
+  return toResearchResult("mock", { queries: [`mock:${q}`], sources, evidence });
+}
+
 export class MockAdapter {
   readonly provider = "mock";
 
@@ -47,10 +85,13 @@ export class MockAdapter {
     // simulate latency proportional to output size
     await new Promise((r) => setTimeout(r, 40 + Math.min(400, usage.completionTokens * 0.6)));
 
+    const research = req.search?.enabled ? buildMockResearch(user) : undefined;
+
     return {
       text,
       usage,
       latencyMs: Date.now() - started,
+      research,
     };
   }
 

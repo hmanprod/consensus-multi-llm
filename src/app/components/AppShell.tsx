@@ -31,10 +31,12 @@ export function AppShell({
   initialConversations,
   authEnabled,
   providersStatus,
+  demo,
 }: {
   initialConversations: StoredConversation[];
   authEnabled: boolean;
   providersStatus: ProviderStatus[];
+  demo?: boolean;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -222,6 +224,7 @@ export function AppShell({
         onRename={handleRename}
         onDelete={handleDelete}
         authEnabled={authEnabled}
+        demo={demo}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">

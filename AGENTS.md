@@ -61,6 +61,8 @@ Outilillage installé (scaffold Next.js 16 + Prisma 7) :
 - `npx tsc --noEmit` — typecheck TypeScript
 - `npx prisma generate` — régénère le client Prisma
 - `npx tsx scripts/test-engine.ts` — test du moteur (workflow complet en mode mock)
+- `npx tsx scripts/test-research.ts` — test des contrats recherche + agent analyste (mock)
+- `npx tsx scripts/benchmark.ts --limit=10` — benchmark des variantes recherche (rapports dans `benchmark-results/`, corpus dans `corpus/questions.ts`)
 
 ## Pour démarrer
 

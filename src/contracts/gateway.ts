@@ -1,3 +1,5 @@
+import type { ResearchPolicy, ResearchResult } from "./research";
+
 export type Role =
   | "orchestrator"
   | "analyst"
@@ -23,6 +25,7 @@ export interface GenerationRequest {
   maxTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  search?: ResearchPolicy;
 }
 
 export interface Usage {
@@ -35,6 +38,7 @@ export interface GenerationResult {
   usage: Usage;
   latencyMs: number;
   raw?: unknown;
+  research?: ResearchResult;
 }
 
 export interface ProviderAdapter {

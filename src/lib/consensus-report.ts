@@ -12,6 +12,8 @@ function detectSection(title: string): keyof ConsensusReport | null {
   if (t.startsWith("points d'accord") || t.startsWith("agreement")) return "agreements";
   if (t.startsWith("points de désaccord") || t.startsWith("points de desaccord") || t.startsWith("disagreement")) return "disagreements";
   if (t.startsWith("limite")) return "limitations";
+  if (t.startsWith("informations non vérifiées") || t.startsWith("informations non verifiees") || t.startsWith("non vérifié") || t.startsWith("unverified")) return "unverified";
+  if (t.startsWith("sources")) return "sources";
   if (t.startsWith("prochaine étape") || t.startsWith("prochaine etape") || t.startsWith("next step")) return "nextSteps";
   return null;
 }
@@ -87,7 +89,9 @@ export function parseConsensusReport(markdown: string): ConsensusReport | null {
         report.recommendation = items.paragraphs.join(" ") || items.bullets.join(" ");
         break;
       case "limitations":
-        report.limitations = [...items.bullets, ...items.paragraphs];
+      case "sources":
+      case "unverified":
+        report[section.key] = [...items.bullets, ...items.paragraphs];
         break;
       case "nextSteps":
         report.nextSteps = [...items.bullets, ...items.paragraphs];

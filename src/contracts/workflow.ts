@@ -1,4 +1,5 @@
 import type { ModelSpec, Usage } from "./gateway";
+import type { AnalystDossier } from "./research";
 
 export type Profile = "economical" | "best" | "custom";
 
@@ -13,6 +14,7 @@ export interface OrchestrationConfig {
   maxTokensPerCall: number;
   timeoutMs: number;
   minAgreementScore: number;
+  search?: boolean;
 }
 
 export interface AnalysisOutput {
@@ -22,6 +24,7 @@ export interface AnalysisOutput {
   model: ModelSpec;
   text: string;
   usage: Usage;
+  dossier?: AnalystDossier;
 }
 
 export interface ConsensusReport {
@@ -32,6 +35,8 @@ export interface ConsensusReport {
   disagreements: string[];
   limitations: string[];
   nextSteps: string[];
+  sources?: string[];
+  unverified?: string[];
 }
 
 export interface FinalSynthesisOutput extends AnalysisOutput {

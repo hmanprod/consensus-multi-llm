@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function ConfigurationsPage() {
   const [saved, conversations] = await Promise.all([listSavedConfigs(), listAllConversations()]);
   return (
-    <PageShell title="Configurations" conversations={conversations} authEnabled={authEnabled()}>
+    <PageShell title="Configurations" conversations={conversations} authEnabled={authEnabled()} demo={MOCK_MODE}>
       <ConfigurationsClient initial={saved} demo={MOCK_MODE} />
     </PageShell>
   );

@@ -58,6 +58,7 @@ export function Sidebar({
   onDelete,
   authEnabled,
   activeHref,
+  demo,
 }: {
   conversations: StoredConversation[];
   selectedId: string | null;
@@ -71,6 +72,7 @@ export function Sidebar({
   onDelete: (id: string) => Promise<void>;
   authEnabled: boolean;
   activeHref?: string;
+  demo?: boolean;
 }) {
   const [query, setQuery] = useState("");
 
@@ -95,6 +97,7 @@ export function Sidebar({
       onDelete={onDelete}
       authEnabled={authEnabled}
       activeHref={activeHref}
+      demo={demo}
     />
   );
 
@@ -157,6 +160,7 @@ function SidebarContent({
   onDelete,
   authEnabled,
   activeHref,
+  demo,
 }: {
   conversations: StoredConversation[];
   groups: Group[];
@@ -170,6 +174,7 @@ function SidebarContent({
   onDelete: (id: string) => Promise<void>;
   authEnabled: boolean;
   activeHref?: string;
+  demo?: boolean;
 }) {
   if (collapsed) {
     return (
@@ -185,9 +190,11 @@ function SidebarContent({
           <PlusIcon size={18} />
         </button>
         <nav className="flex-1 px-2 py-3" aria-label="Navigation">
-          <ConversationNavLink href="/configurations" label="Configurations">
-            <LayersIcon size={18} />
-          </ConversationNavLink>
+          {!demo && (
+            <ConversationNavLink href="/configurations" label="Configurations">
+              <LayersIcon size={18} />
+            </ConversationNavLink>
+          )}
           <ConversationNavLink href="/providers" label="Providers">
             <PanelIcon size={18} />
           </ConversationNavLink>
@@ -255,10 +262,12 @@ function SidebarContent({
       <div className="border-t border-border px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <AuthRow enabled={authEnabled} />
       <div className="mt-2 flex flex-col gap-0.5">
-        <SidebarLink href="/configurations" active={activeHref === "/configurations"}>
-          <LayersIcon size={15} />
-          Configurations
-        </SidebarLink>
+        {!demo && (
+          <SidebarLink href="/configurations" active={activeHref === "/configurations"}>
+            <LayersIcon size={15} />
+            Configurations
+          </SidebarLink>
+        )}
         <SidebarLink href="/providers" active={activeHref === "/providers"}>
           <PanelIcon size={15} />
           Providers
