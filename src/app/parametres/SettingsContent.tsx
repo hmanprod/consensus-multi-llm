@@ -1,143 +1,224 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { isPersistent } from "@/lib/db";
-import { MOCK_MODE } from "@/config/profiles";
+import type { OrchestrationConfig } from "@/contracts/workflow";
+import type { listProvidersStatus } from "@/app/actions";
+import { formatBudget, formatEstimatedCost } from "@/lib/format";
+import { Badge } from "@/app/components/ui/Badge";
+import { Button } from "@/app/components/ui/Button";
+import { ChevronDownIcon } from "@/app/components/ui/icons";
 
-type Tone = "success" | "warning" | "neutral" | "accent";
+type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 
-const DOT_TONES: Record<Tone, string> = {
-  success: "bg-success",
-  warning: "bg-warning",
-  neutral: "bg-ink-faint",
-  accent: "bg-accent",
-};
-
-interface StatusItem {
-  label: string;
-  value: string;
-  tone: Tone;
-  action?: { href: string; label: string };
-}
-
-interface StatusGroup {
-  title: string;
-  items: StatusItem[];
-}
-
-const GROUPS: StatusGroup[] = [
-  {
-    title: "Mode d'exécution",
-    items: [
-      {
-        label: "Mode démo (provider mock)",
-        value: MOCK_MODE ? "Actif — analyses simulées, aucun coût" : "Inactif — vrais providers utilisés",
-        tone: MOCK_MODE ? "warning" : "success",
-        action: { href: "/providers", label: "Configurer les providers" },
-      },
-      {
-        label: "Persistance",
-        value: isPersistent() ? "Neon PostgreSQL (Prisma)" : "Mémoire (démo)",
-        tone: isPersistent() ? "success" : "neutral",
-      },
-    ],
-  },
-  {
-    title: "Workflow",
-    items: [
-      {
-        label: "Processus",
-        value: "Analyse A → B/C → consolidation → révisions → analyse finale",
-        tone: "neutral",
-      },
-      {
-        label: "Analystes",
-        value: "2 par défaut (ajoutables)",
-        tone: "neutral",
-        action: { href: "/configurations", label: "Personnaliser" },
-      },
-      {
-        label: "Profils",
-        value: "Économique, Best Models, Personnalisé",
-        tone: "neutral",
-      },
-      {
-        label: "Budget par défaut",
-        value: "60 cents · budget max contrôlé",
-        tone: "neutral",
-      },
-    ],
-  },
-  {
-    title: "Fournisseurs",
-    items: [
-      {
-        label: "Providers",
-        value: "8 (OpenAI, Anthropic, Gemini, DeepSeek, Qwen, Kimi, GLM, OpenRouter)",
-        tone: "neutral",
-        action: { href: "/providers", label: "Gérer les clés" },
-      },
-      {
-        label: "Chiffrement des clés",
-        value: "AES-256-GCM côté serveur",
-        tone: "success",
-      },
-      {
-        label: "Authentification",
-        value: "Clerk (env-gated)",
-        tone: "accent",
-      },
-    ],
-  },
+const SUB_NAV = [
+  { href: "#general", label: "Configuration" },
+  { href: "#providers", label: "Providers" },
+  { href: "#securite", label: "Sécurité" },
+  { href: "#etat-technique", label: "État technique" },
 ];
 
-export function SettingsContent() {
+export function SettingsContent({
+  activeName,
+  activeConfig,
+  demo,
+  providersStatus,
+  persistent,
+  authEnabled,
+}: {
+  activeName: string;
+  activeConfig: OrchestrationConfig;
+  demo: boolean;
+  providersStatus: ProviderStatus[];
+  persistent: boolean;
+  authEnabled: boolean;
+}) {
+  const [techOpen, setTechOpen] = useState(false);
+  const providersConfigured = providersStatus.filter((p) => p.enabled && p.provider !== "mock").length;
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Paramètres</h1>
       <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-        État de l&apos;application. Ajoutez une clé dans{" "}
-        <Link href="/providers" className="text-accent hover:underline">
-          Providers
-        </Link>{" "}
-        pour sortir du mode démo.
+        Gérez votre espace : la configuration utilisée pour vos analyses, vos providers et la sécurité.
       </p>
 
-      <div className="mt-8 space-y-8">
-        {GROUPS.map((group) => (
-          <section key={group.title}>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">{group.title}</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {group.items.map((item) => (
-                <StatusCard key={item.label} item={item} />
-              ))}
-            </div>
-          </section>
+      <nav aria-label="Sections des paramètres" className="mt-6 flex flex-wrap gap-1.5">
+        {SUB_NAV.map((s) => (
+          <a
+            key={s.href}
+            href={s.href}
+            className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+          >
+            {s.label}
+          </a>
         ))}
-      </div>
+      </nav>
+
+      <section id="general" className="mt-8 scroll-mt-4">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Configuration active</h2>
+        <div className="rounded-xl border border-border bg-bg p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-ink">{activeName}</p>
+                <Badge tone="accent">Actif</Badge>
+                {demo && <Badge tone="warning">Démo</Badge>}
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
+                {activeConfig.analysts.length} analystes indépendants, puis une comparaison et une synthèse finale.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-secondary">
+                <span>
+                  Budget maximal : <span className="font-medium text-ink">{formatBudget(activeConfig.maxBudgetCents)}</span>
+                </span>
+                <span>
+                  Coût estimé : <span className="font-medium text-ink">≈ {formatEstimatedCost(activeConfig)} par analyse</span>
+                </span>
+              </div>
+            </div>
+            <Link href="/configurations" className="shrink-0">
+              <Button size="sm" variant="secondary">
+                Modifier
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section id="providers" className="mt-8 scroll-mt-4">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Providers</h2>
+
+        {demo ? (
+          <div className="rounded-xl border border-warning/30 bg-warning-soft/40 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-ink">Mode démo actif</p>
+              <Badge tone="warning">À configurer</Badge>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+              Les réponses sont simulées et aucun coût réel n&apos;est engagé. Configurez au moins un provider pour
+              lancer des analyses avec vos propres modèles.
+            </p>
+            <Link href="/providers" className="mt-3 inline-block">
+              <Button size="sm" variant="primary">
+                Configurer les providers
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-success/30 bg-success-soft/40 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-ink">Modèles réels actifs</p>
+              <Badge tone="success">Actif</Badge>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+              {providersConfigured} provider{providersConfigured > 1 ? "s" : ""} configuré
+              {providersConfigured > 1 ? "s" : ""} — vos analyses utilisent vos clés API.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-bg p-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Clés API</p>
+            <p className="mt-0.5 text-xs text-ink-secondary">
+              {providersConfigured} provider{providersConfigured > 1 ? "s" : ""} configuré
+              {providersConfigured > 1 ? "s" : ""} · chiffrées côté serveur
+            </p>
+          </div>
+          <Link href="/providers" className="shrink-0">
+            <Button size="sm" variant="secondary">
+              Gérer les clés
+            </Button>
+          </Link>
+        </div>
+      </section>
+
+      <section id="securite" className="mt-8 scroll-mt-4">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Sécurité</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatusRow
+            label="Clés API"
+            value="Chiffrées côté serveur (AES-256-GCM), jamais stockées en clair"
+            badge="Sécurisé"
+            tone="success"
+          />
+          <StatusRow
+            label="Authentification"
+            value={authEnabled ? "Comptes utilisateurs (Clerk)" : "Non requise — mode démo"}
+            badge={authEnabled ? "Actif" : "Information"}
+            tone={authEnabled ? "success" : "neutral"}
+          />
+        </div>
+      </section>
+
+      <section id="etat-technique" className="mt-8 scroll-mt-4">
+        <button
+          type="button"
+          onClick={() => setTechOpen((v) => !v)}
+          aria-expanded={techOpen}
+          className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left"
+        >
+          <span className="text-sm font-semibold text-ink">État technique</span>
+          <span className="text-xs text-ink-faint">Détails avancés</span>
+          <ChevronDownIcon size={16} className={`text-ink-faint transition-transform ${techOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {techOpen && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <StatusRow
+              label="Persistance"
+              value={persistent ? "Neon PostgreSQL (Prisma)" : "Mémoire (démo)"}
+              badge={persistent ? "Actif" : "Information"}
+              tone={persistent ? "success" : "neutral"}
+            />
+            <StatusRow
+              label="Workflow"
+              value="Analyse A → B (analystes) → S (consolidation) → R (révisions) → F (synthèse)"
+              badge="Information"
+              tone="neutral"
+            />
+            <StatusRow
+              label="Analystes par profil"
+              value="Économique : 3 · Approfondi : 5"
+              badge="Information"
+              tone="neutral"
+            />
+            <StatusRow
+              label="Budget par défaut"
+              value="Contrôlé par configuration · aucun dépassement possible"
+              badge="Sécurisé"
+              tone="success"
+            />
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function StatusCard({ item }: { item: StatusItem }) {
+function StatusRow({
+  label,
+  value,
+  badge,
+  tone,
+}: {
+  label: string;
+  value: string;
+  badge: string;
+  tone: "success" | "warning" | "neutral";
+}) {
   return (
     <div className="rounded-xl border border-border bg-bg p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">{item.label}</p>
-          <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{item.value}</p>
+          <p className="text-sm font-medium text-ink">{label}</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{value}</p>
         </div>
-        <span
-          aria-hidden="true"
-          className={`mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full ${DOT_TONES[item.tone]}`}
-        />
+        <Badge tone={tone} className="shrink-0">
+          {badge}
+        </Badge>
       </div>
-      {item.action && (
-        <Link
-          href={item.action.href}
-          className="mt-3 inline-block text-xs font-medium text-accent hover:underline"
-        >
-          {item.action.label}
-        </Link>
-      )}
     </div>
   );
 }

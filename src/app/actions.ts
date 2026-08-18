@@ -1,7 +1,8 @@
 "use server";
 
 import { z } from "zod";
-import type { OrchestrationConfig, Profile } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, Profile } from "@/contracts/workflow";
+import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getProfile, describeProfile, resolveAvailableSpecs } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
@@ -12,6 +13,10 @@ import type { KnownProvider } from "@/gateway";
 
 const PROFILE_SCHEMA = z.enum(["economical", "best", "custom"]);
 const PROVIDER_SCHEMA = z.enum(KNOWN_PROVIDERS as unknown as [string, ...string[]]);
+const ACTIVE_CONFIG_SCHEMA = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("profile"), profile: z.enum(["economical", "best"]) }),
+  z.object({ type: z.literal("saved"), id: z.string().min(1) }),
+]);
 
 export type AskResult = {
   runId: string;
@@ -33,8 +38,7 @@ async function bindStoredKeys() {
   });
 }
 
-async function buildConfig(profile: Profile): Promise<OrchestrationConfig> {
-  const base = getProfile(profile);
+async function resolveConfig(base: OrchestrationConfig): Promise<OrchestrationConfig> {
   const store = await getStore();
   const hasKey = async (provider: string) => {
     if (provider === "mock") return true;
@@ -47,9 +51,55 @@ async function buildConfig(profile: Profile): Promise<OrchestrationConfig> {
   return resolveAvailableSpecs(base, (p) => Boolean(keys[p]));
 }
 
+async function savedConfigBase(id: string): Promise<OrchestrationConfig> {
+  const store = await getStore();
+  const saved = await store.getConfig(id);
+  if (!saved) return getProfile("economical");
+  return { ...saved.config, profile: "custom" };
+}
+
+async function resolveConfigRef(ref: ActiveConfig): Promise<OrchestrationConfig> {
+  const base = ref.type === "profile" ? getProfile(ref.profile) : await savedConfigBase(ref.id);
+  return resolveConfig(base);
+}
+
+async function getActiveConfigRef(): Promise<ActiveConfig> {
+  const store = await getStore();
+  return store.getActiveConfig();
+}
+
+export async function getActiveConfiguration(): Promise<{
+  ref: ActiveConfig;
+  config: OrchestrationConfig;
+}> {
+  return asUser(async () => {
+    const store = await getStore();
+    let ref = await getActiveConfigRef();
+    if (ref.type === "saved" && !(await store.getConfig(ref.id))) {
+      ref = { ...DEFAULT_ACTIVE_CONFIG };
+      await store.setActiveConfig(ref);
+    }
+    const base = ref.type === "profile" ? getProfile(ref.profile) : await savedConfigBase(ref.id);
+    return { ref, config: { ...base, profile: ref.type === "profile" ? ref.profile : "custom" } };
+  });
+}
+
+export async function setActiveConfiguration(input: { ref: ActiveConfig }) {
+  return asUser(async () => {
+    const ref = ACTIVE_CONFIG_SCHEMA.parse(input.ref);
+    if (ref.type === "saved") {
+      const store = await getStore();
+      if (!(await store.getConfig(ref.id))) throw new Error("configuration_not_found");
+    }
+    const store = await getStore();
+    await store.setActiveConfig(ref);
+    return { ok: true, ref };
+  });
+}
+
 export async function askQuestion(input: {
   question: string;
-  profile?: string;
+  configRef?: ActiveConfig;
   conversationId?: string;
 }): Promise<AskResult> {
   const question = input.question.trim();
@@ -57,9 +107,10 @@ export async function askQuestion(input: {
   if (question.length > 2000) throw new Error("question_too_long");
 
   return userStorage.run(await getAuthUserId(), async () => {
-    const profileResult = PROFILE_SCHEMA.safeParse(input.profile ?? "economical");
-    const profile: Profile = profileResult.success ? profileResult.data : "economical";
-    const config = await buildConfig(profile);
+    const refResult = input.configRef ? ACTIVE_CONFIG_SCHEMA.safeParse(input.configRef) : { success: true, data: null };
+    const config = refResult.success && refResult.data
+      ? await resolveConfigRef(refResult.data)
+      : await resolveConfigRef(await getActiveConfigRef());
 
     await bindStoredKeys();
 

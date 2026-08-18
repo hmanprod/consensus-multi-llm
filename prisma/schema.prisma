@@ -10,6 +10,7 @@ model User {
   id           String    @id @default(cuid())
   clerkId      String    @unique
   email        String
+  activeConfig Json?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   workspaces   Workspace[]
@@ -71,6 +72,7 @@ model OrchestrationConfiguration {
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name                String
   profile             String   @default("balanced") // economical | balanced | custom
+  configJson          Json?
   orchestratorModelId String?
   consensusModelId    String?
   synthesisModelId    String?

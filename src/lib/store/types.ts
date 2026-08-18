@@ -1,4 +1,4 @@
-import type { OrchestrationConfig, RunResult, RunStatus } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, RunStatus } from "@/contracts/workflow";
 
 export interface StoredMessage {
   id: string;
@@ -58,4 +58,6 @@ export interface Store {
   saveConfig(name: string, profile: OrchestrationConfig["profile"], config: OrchestrationConfig): Promise<StoredConfig>;
   listConfigs(): Promise<StoredConfig[]>;
   getConfig(id: string): Promise<StoredConfig | null>;
+  setActiveConfig(ref: ActiveConfig): Promise<void>;
+  getActiveConfig(): Promise<ActiveConfig>;
 }

@@ -1,23 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { OrchestrationConfig } from "@/contracts/workflow";
-import { getProfile } from "@/config/profiles";
+import type { ActiveConfig, OrchestrationConfig, ProfileRef } from "@/contracts/workflow";
+import { getProfile, PROFILE_META } from "@/config/profiles";
 import { MODELS_BY_PROVIDER, PROVIDER_LABELS } from "@/config/models";
-import { listSavedConfigs, saveCustomConfig } from "@/app/actions";
-import { estimateCost } from "@/gateway/cost";
+import { listSavedConfigs, saveCustomConfig, setActiveConfiguration } from "@/app/actions";
+import { costLevel, estimateRunCostCents, formatBudget, formatEstimatedCost } from "@/lib/format";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
-import { ChevronDownIcon } from "@/app/components/ui/icons";
+import { ChevronDownIcon, TrashIcon } from "@/app/components/ui/icons";
 
 type RoleSpec = { provider: string; model: string };
 type SavedConfig = Awaited<ReturnType<typeof listSavedConfigs>>[number];
-type ActiveRef = "economical" | "best" | `saved:${string}`;
 
-const DEFAULT_PROFILES: { id: "economical" | "best"; name: string; tagline: string; speed: string }[] = [
-  { id: "economical", name: "Économique", tagline: "Modèles rapides, budget maîtrisé", speed: "Rapide" },
-  { id: "best", name: "Best Models", tagline: "Meilleurs modèles, analyse approfondie", speed: "Approfondi" },
-];
+const PROFILE_IDS: ProfileRef[] = ["economical", "best"];
 
 function analystName(index: number): string {
   return `Analyste ${String.fromCharCode(66 + index)}`;
@@ -27,47 +23,60 @@ function specLabel(spec: RoleSpec): string {
   return `${PROVIDER_LABELS[spec.provider] ?? spec.provider} · ${MODELS_BY_PROVIDER[spec.provider]?.find((m) => m.slug === spec.model)?.label ?? spec.model}`;
 }
 
-function estimateRunCost(config: OrchestrationConfig): string {
-  const promptLen = 400;
-  let total = estimateCost(config.orchestrator, promptLen, 400);
-  for (const a of config.analysts) {
-    total += estimateCost(a, promptLen, 500);
-    total += estimateCost(config.orchestrator, promptLen * 3, 400);
-    total += estimateCost(a, promptLen * 4, 400);
-  }
-  total += estimateCost(config.orchestrator, promptLen * 6, 700);
-  return `${(total / 100).toFixed(2)} €`;
-}
-
 export function ConfigurationsClient({
   initial,
   demo,
+  initialActive,
 }: {
   initial: SavedConfig[];
   demo: boolean;
+  initialActive: ActiveConfig;
 }) {
   const defaultCfg = getProfile("economical");
   const [saved, setSaved] = useState(initial);
-  const [active, setActive] = useState<ActiveRef>("economical");
+  const [active, setActive] = useState<ActiveConfig>(initialActive);
   const [name, setName] = useState("");
   const [orchestrator, setOrchestrator] = useState<RoleSpec>(defaultCfg.orchestrator);
   const [analysts, setAnalysts] = useState<RoleSpec[]>(defaultCfg.analysts);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const customMode = showAdvanced || active.startsWith("saved:");
-  const draftConfig: OrchestrationConfig = { ...defaultCfg, orchestrator, analysts };
+  const draftConfig: OrchestrationConfig = { ...defaultCfg, profile: "custom", orchestrator, analysts };
 
-  function activateProfile(id: "economical" | "best") {
-    setActive(id);
-    setShowAdvanced(false);
-    setDone(null);
+  function loadIntoForm(config: OrchestrationConfig) {
+    setOrchestrator(config.orchestrator);
+    setAnalysts(config.analysts);
   }
 
-  function activateSaved(id: string) {
-    setActive(`saved:${id}`);
+  async function persistActive(ref: ActiveConfig): Promise<boolean> {
+    setActive(ref);
+    try {
+      await setActiveConfiguration({ ref });
+      return true;
+    } catch (err) {
+      setDone({ ok: false, text: err instanceof Error ? err.message : "Erreur" });
+      return false;
+    }
+  }
+
+  async function activateProfile(id: ProfileRef) {
+    const cfg = getProfile(id);
+    loadIntoForm(cfg);
+    setShowAdvanced(false);
     setDone(null);
+    if (await persistActive({ type: "profile", profile: id })) {
+      setDone({ ok: true, text: `Profil ${PROFILE_META[id].name} activé.` });
+    }
+  }
+
+  async function activateSaved(id: string) {
+    const found = saved.find((c) => c.id === id);
+    if (found) loadIntoForm(found.config);
+    setDone(null);
+    if (await persistActive({ type: "saved", id })) {
+      setDone({ ok: true, text: "Configuration activée." });
+    }
   }
 
   function setOrchestratorPatch(patch: Partial<RoleSpec>) {
@@ -100,10 +109,12 @@ export function ConfigurationsClient({
     try {
       const res = await saveCustomConfig({ name, config: draftConfig });
       setSaved(await listSavedConfigs());
-      setActive(`saved:${res.id}`);
-      setDone("Configuration enregistrée et active.");
+      const ref: ActiveConfig = { type: "saved", id: res.id };
+      setActive(ref);
+      await setActiveConfiguration({ ref });
+      setDone({ ok: true, text: "Configuration enregistrée et activée." });
     } catch (err) {
-      setDone(err instanceof Error ? err.message : "Erreur");
+      setDone({ ok: false, text: err instanceof Error ? err.message : "Erreur" });
     } finally {
       setBusy(false);
     }
@@ -113,24 +124,23 @@ export function ConfigurationsClient({
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Configurations</h1>
       <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-        Deux profils prêts à l&apos;emploi. Vous pouvez ensuite créer vos propres configurations
-        personnalisées.
+        Choisissez comment Consensus doit analyser vos questions : une réponse rapide ou une analyse
+        approfondie. Vous pouvez aussi créer votre propre configuration.
       </p>
 
       <div className="mt-8">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Profils prêts à l&apos;emploi
+          Profils recommandés
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {DEFAULT_PROFILES.map((p) => (
+          {PROFILE_IDS.map((id) => (
             <ProfileFiche
-              key={p.id}
-              profile={p}
-              config={getProfile(p.id)}
-              active={active === p.id}
-              dimmed={customMode}
+              key={id}
+              id={id}
+              config={getProfile(id)}
+              active={active.type === "profile" && active.profile === id}
               demo={demo}
-              onUse={() => activateProfile(p.id)}
+              onUse={() => activateProfile(id)}
             />
           ))}
         </div>
@@ -154,7 +164,19 @@ export function ConfigurationsClient({
 
         {showAdvanced && (
           <div className="mt-3 space-y-4">
-            <div>
+            <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-xs">
+              <span className="text-accent-strong">Éditeur personnalisé ouvert</span>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(false)}
+                className="font-medium text-accent hover:underline"
+              >
+                Revenir aux profils
+              </button>
+            </div>
+
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Informations</p>
               <label htmlFor="cfg-name" className="mb-1.5 block text-sm font-medium text-ink">
                 Nom de la configuration
               </label>
@@ -165,20 +187,11 @@ export function ConfigurationsClient({
                 placeholder="Ex. : Configuration équilibrée"
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
               />
-            </div>
-
-            <section className="rounded-lg border border-border p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                Orchestrateur (Analyse A + consolidation + finale)
-              </p>
-              <RolePicker label="Orchestrateur" spec={orchestrator} onChange={(patch) => setOrchestratorPatch(patch)} />
             </section>
 
-            <section className="rounded-lg border border-border p-3">
+            <section>
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                  Analystes ({analysts.length})
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Modèles utilisés</p>
                 <button
                   type="button"
                   onClick={addAnalyst}
@@ -187,34 +200,61 @@ export function ConfigurationsClient({
                   + Ajouter un analyste
                 </button>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border p-3">
+                  <p className="mb-2 text-xs font-medium text-ink">Orchestrateur (analyse A + synthèse)</p>
+                  <RolePicker label="Orchestrateur" spec={orchestrator} onChange={(patch) => setOrchestratorPatch(patch)} />
+                </div>
                 {analysts.map((a, i) => (
-                  <div key={i} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div key={i} className="rounded-lg border border-border p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-medium text-ink">{analystName(i)}</p>
+                      {analysts.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => removeAnalyst(i)}
+                          aria-label={`Retirer ${analystName(i)}`}
+                          title={`Retirer ${analystName(i)}`}
+                          className="rounded p-1 text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+                        >
+                          <TrashIcon size={14} />
+                        </button>
+                      )}
+                    </div>
                     <RolePicker label={analystName(i)} spec={a} onChange={(patch) => setAnalyst(i, patch)} compact />
-                    {analysts.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => removeAnalyst(i)}
-                        className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-surface hover:text-danger sm:self-center"
-                      >
-                        Retirer
-                      </button>
-                    )}
                   </div>
                 ))}
               </div>
             </section>
 
-            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-ink-secondary">
+            <section className="rounded-lg border border-border p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Budget et limites</p>
+              <p className="text-sm text-ink">
+                Budget maximal : <span className="font-medium">{formatBudget(draftConfig.maxBudgetCents)}</span>
+                <span className="ml-1 text-xs text-ink-secondary">— aucune analyse ne dépassera cette limite.</span>
+              </p>
+              <p className="mt-2 text-sm text-ink">
                 Coût estimé par analyse :{" "}
-                <span className="font-medium text-ink">{estimateRunCost(draftConfig)}</span>
+                <span className="font-medium">{formatEstimatedCost(draftConfig)}</span>
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
+                Estimation pour une analyse complète (consolidation, révisions et synthèse comprises). Le coût
+                réel dépend de la longueur de la question et des réponses.{" "}
+                <span className="font-medium text-ink">Niveau de coût : {costLevel(estimateRunCostCents(draftConfig))}.</span>
+              </p>
+            </section>
+
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-ink-secondary">
+                {analysts.length} analystes · {orchestrator ? specLabel(orchestrator) : ""}
               </p>
               <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
                 {busy ? "Enregistrement…" : "Enregistrer la configuration"}
               </Button>
             </div>
-            {done && <p className="text-sm text-ink-secondary">{done}</p>}
+            {done && (
+              <p className={`text-sm ${done.ok ? "text-success" : "text-danger"}`}>{done.text}</p>
+            )}
           </div>
         )}
       </form>
@@ -222,12 +262,15 @@ export function ConfigurationsClient({
       {saved.length > 0 && (
         <div className="mt-10">
           <h2 className="text-lg font-semibold text-ink">Configurations enregistrées</h2>
+          <p className="mt-1 text-xs text-ink-secondary">
+            Vos configurations personnalisées. Cliquez sur « Utiliser » pour lancer vos analyses avec celle-ci.
+          </p>
           <ul className="mt-3 space-y-3">
             {saved.map((c) => (
               <SavedFiche
                 key={c.id}
                 config={c}
-                active={active === `saved:${c.id}`}
+                active={active.type === "saved" && active.id === c.id}
                 onUse={() => activateSaved(c.id)}
               />
             ))}
@@ -238,70 +281,72 @@ export function ConfigurationsClient({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-bg px-2 py-1.5">
-      <p className="text-[11px] text-ink-faint">{label}</p>
-      <p className="mt-0.5 text-sm font-medium text-ink">{value}</p>
-    </div>
-  );
-}
-
 function ProfileFiche({
-  profile,
+  id,
   config,
   active,
-  dimmed,
   demo,
   onUse,
 }: {
-  profile: { id: "economical" | "best"; name: string; tagline: string; speed: string };
+  id: ProfileRef;
   config: OrchestrationConfig;
   active: boolean;
-  dimmed: boolean;
   demo: boolean;
   onUse: () => void;
 }) {
-  const cardClass = dimmed
-    ? "border-border bg-surface opacity-50"
-    : active
-      ? "border-accent bg-accent-soft/40 ring-1 ring-accent"
-      : "border-border bg-surface";
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const meta = PROFILE_META[id];
+  const cost = estimateRunCostCents(config);
+
   return (
-    <div className={`rounded-xl border p-4 transition-colors ${cardClass}`}>
+    <div
+      className={`rounded-xl border p-4 transition-colors ${
+        active ? "border-accent bg-accent-soft/40 ring-1 ring-accent" : "border-border bg-surface"
+      }`}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-ink">{profile.name}</p>
-            <Badge tone="neutral">{profile.speed}</Badge>
+            <p className="text-sm font-semibold text-ink">{meta.name}</p>
+            <Badge tone="neutral">{meta.speed}</Badge>
+            {id === "best" && <Badge tone="success">Recommandé</Badge>}
             {demo && <Badge tone="warning">Démo</Badge>}
-            {active && !dimmed && <Badge tone="accent">Actif</Badge>}
+            {active && <Badge tone="accent">Actif</Badge>}
           </div>
-          <p className="mt-0.5 text-xs text-ink-secondary">{profile.tagline}</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{meta.tagline}</p>
         </div>
-        {!active || dimmed ? (
-          <Button size="sm" variant={dimmed ? "secondary" : "primary"} onClick={onUse}>
+        {!active && (
+          <Button size="sm" variant="primary" onClick={onUse}>
             Utiliser
           </Button>
-        ) : null}
+        )}
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Stat label="Analystes" value={String(config.analysts.length)} />
-        <Stat label="Budget max" value={`${(config.maxBudgetCents / 100).toFixed(2)} €`} />
-        <Stat label="Coût / analyse" value={estimateRunCost(config)} />
+      <p className="mt-3 text-xs text-ink-secondary">
+        {config.analysts.length} analystes · budget max {formatBudget(config.maxBudgetCents)} · ≈{" "}
+        {formatEstimatedCost(config)} par analyse
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setModelsOpen((v) => !v)} aria-expanded={modelsOpen}>
+          {modelsOpen ? "Masquer les modèles" : "Voir les modèles"}
+          <ChevronDownIcon size={12} className={`transition-transform ${modelsOpen ? "rotate-180" : ""}`} />
+        </Button>
+        <span className="text-[11px] text-ink-faint">Coût estimé : {costLevel(cost)}</span>
       </div>
 
-      <ul className="mt-3 space-y-1 border-t border-border pt-3">
-        <li className="text-xs text-ink-secondary">
-          <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.orchestrator)}
-        </li>
-        {config.analysts.map((a, i) => (
-          <li key={i} className="text-xs text-ink-secondary">
-            <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
+      {modelsOpen && (
+        <ul className="mt-3 space-y-1 border-t border-border pt-3">
+          <li className="text-xs text-ink-secondary">
+            <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.orchestrator)}
           </li>
-        ))}
-      </ul>
+          {config.analysts.map((a, i) => (
+            <li key={i} className="text-xs text-ink-secondary">
+              <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -315,6 +360,8 @@ function SavedFiche({
   active: boolean;
   onUse: () => void;
 }) {
+  const [modelsOpen, setModelsOpen] = useState(false);
+
   return (
     <li
       className={`rounded-xl border p-4 transition-colors ${
@@ -322,11 +369,11 @@ function SavedFiche({
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-ink">{config.name}</p>
           <p className="mt-0.5 text-xs text-ink-secondary">
-            {config.config.analysts.length} analystes · budget {config.config.maxBudgetCents} cents ·
-            ≈ {estimateRunCost(config.config)}
+            {config.config.analysts.length} analystes · budget max{" "}
+            {formatBudget(config.config.maxBudgetCents)} · ≈ {formatEstimatedCost(config.config)} par analyse
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -340,16 +387,29 @@ function SavedFiche({
           )}
         </div>
       </div>
-      <ul className="mt-3 space-y-1 border-t border-border pt-3">
-        <li className="text-xs text-ink-secondary">
-          <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.config.orchestrator)}
-        </li>
-        {config.config.analysts.map((a, i) => (
-          <li key={i} className="text-xs text-ink-secondary">
-            <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={() => setModelsOpen((v) => !v)}
+          aria-expanded={modelsOpen}
+          className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+        >
+          {modelsOpen ? "Masquer les modèles" : "Voir les modèles"}
+          <ChevronDownIcon size={12} className={`transition-transform ${modelsOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+      {modelsOpen && (
+        <ul className="mt-2 space-y-1 border-t border-border pt-3">
+          <li className="text-xs text-ink-secondary">
+            <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.config.orchestrator)}
           </li>
-        ))}
-      </ul>
+          {config.config.analysts.map((a, i) => (
+            <li key={i} className="text-xs text-ink-secondary">
+              <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
 }

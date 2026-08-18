@@ -1,6 +1,7 @@
 "use client";
 
-import type { Profile } from "@/contracts/workflow";
+import type { ActiveConfig } from "@/contracts/workflow";
+import type { StoredConfig } from "@/lib/store";
 import { Composer } from "./Composer";
 import { SparklesIcon } from "./ui/icons";
 
@@ -17,16 +18,18 @@ export function EmptyState({
   onSubmit,
   busy,
   onStop,
-  profile,
-  setProfile,
+  activeRef,
+  savedConfigs,
+  onConfigChange,
 }: {
   question: string;
   setQuestion: (s: string) => void;
   onSubmit: () => void;
   busy: boolean;
   onStop?: () => void;
-  profile: Profile;
-  setProfile: (p: Profile) => void;
+  activeRef: ActiveConfig;
+  savedConfigs: StoredConfig[];
+  onConfigChange: (ref: ActiveConfig) => void;
 }) {
   return (
     <div className="flex h-full items-center justify-center px-6 py-8">
@@ -66,8 +69,9 @@ export function EmptyState({
             onSubmit={onSubmit}
             busy={busy}
             onStop={onStop}
-            profile={profile}
-            setProfile={setProfile}
+            activeRef={activeRef}
+            savedConfigs={savedConfigs}
+            onConfigChange={onConfigChange}
           />
         </div>
       </div>

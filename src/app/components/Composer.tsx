@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Profile } from "@/contracts/workflow";
-import { getProfile } from "@/config/profiles";
+import Link from "next/link";
+import type { ActiveConfig } from "@/contracts/workflow";
+import type { StoredConfig } from "@/lib/store";
+import { PROFILE_META, configRefKey, getProfile, parseConfigRefKey } from "@/config/profiles";
 import { SendIcon, SettingsIcon, StopIcon } from "./ui/icons";
 
 export function Composer({
@@ -11,19 +13,22 @@ export function Composer({
   onSubmit,
   busy,
   onStop,
-  profile,
-  setProfile,
+  activeRef,
+  savedConfigs,
+  onConfigChange,
 }: {
   question: string;
   setQuestion: (s: string) => void;
   onSubmit: () => void;
   busy: boolean;
   onStop?: () => void;
-  profile: Profile;
-  setProfile: (p: Profile) => void;
+  activeRef: ActiveConfig;
+  savedConfigs: StoredConfig[];
+  onConfigChange: (ref: ActiveConfig) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const canSubmit = question.trim().length > 0 && !busy;
+  const selectValue = configRefKey(activeRef);
 
   useEffect(() => {
     const el = ref.current;
@@ -73,18 +78,33 @@ export function Composer({
           </button>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 pb-2.5 pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 pb-2.5 pt-2">
         <label className="flex items-center gap-1.5 text-xs text-ink-secondary">
           <SettingsIcon size={13} className="shrink-0 text-ink-faint" />
           <select
-            value={profile}
-            onChange={(e) => setProfile(e.target.value as Profile)}
-            aria-label="Profil d'analyse"
-            className="cursor-pointer rounded-md border border-border bg-surface px-2 py-0.5 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
+            value={selectValue}
+            onChange={(e) => onConfigChange(parseConfigRefKey(e.target.value))}
+            aria-label="Configuration d'analyse"
+            className="max-w-[15rem] cursor-pointer rounded-md border border-border bg-surface px-2 py-0.5 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
           >
-            <option value="economical">Économique · {getProfile("economical").analysts.length} analystes</option>
-            <option value="best">Best Models · {getProfile("best").analysts.length} analystes</option>
+            {(["economical", "best"] as const).map((p) => (
+              <option key={p} value={`profile:${p}`}>
+                {PROFILE_META[p].name} · {getProfile(p).analysts.length} analystes
+              </option>
+            ))}
+            {savedConfigs.map((c) => (
+              <option key={c.id} value={`saved:${c.id}`}>
+                {c.name} · {c.config.analysts.length} analystes
+              </option>
+            ))}
           </select>
+          <Link
+            href="/configurations"
+            className="shrink-0 font-medium text-accent hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Modifier
+          </Link>
         </label>
         <span className="hidden text-[11px] text-ink-faint opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 sm:inline">
           Entrée pour envoyer · Maj + Entrée pour nouvelle ligne

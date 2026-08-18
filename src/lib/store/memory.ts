@@ -1,4 +1,5 @@
-import type { OrchestrationConfig, RunResult } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult } from "@/contracts/workflow";
+import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import type {
   StoredConfig,
   StoredConversation,
@@ -12,6 +13,8 @@ const messages = new Map<string, StoredMessage[]>();
 const runs = new Map<string, StoredRun>();
 const credentials = new Map<string, { encryptedKey: string; keyIv: string }>();
 const configs = new Map<string, StoredConfig>();
+
+let activeConfig: ActiveConfig = { ...DEFAULT_ACTIVE_CONFIG };
 
 let seq = 0;
 function id(prefix: string): string {
@@ -140,6 +143,14 @@ export const memoryStore: Store = {
 
   async getConfig(id) {
     return configs.get(id) ?? null;
+  },
+
+  async setActiveConfig(ref) {
+    activeConfig = { ...ref };
+  },
+
+  async getActiveConfig() {
+    return { ...activeConfig };
   },
 };
 

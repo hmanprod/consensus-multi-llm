@@ -1,4 +1,5 @@
-import type { RunResult } from "@/contracts/workflow";
+import type { ActiveConfig, RunResult } from "@/contracts/workflow";
+import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
 import { currentUserId } from "@/lib/user-context";
 import type {
@@ -219,6 +220,7 @@ export const prismaStore: Store = {
         userId,
         name,
         profile,
+        configJson: config as unknown as object,
         maxRounds: config.maxRounds,
         maxBudgetCents: config.maxBudgetCents,
         maxTokens: config.maxTokensPerCall,
@@ -240,18 +242,7 @@ export const prismaStore: Store = {
       id: c.id,
       name: c.name,
       profile: c.profile as StoredConfig["profile"],
-      config: {
-        profile: c.profile as StoredConfig["profile"],
-        orchestrator: { provider: "mock", model: "orchestrator" },
-        analysts: [{ provider: "mock", model: "analyst" }],
-        consensus: { provider: "mock", model: "consensus" },
-        synthesis: { provider: "mock", model: "synthesis" },
-        maxRounds: c.maxRounds,
-        maxBudgetCents: c.maxBudgetCents,
-        maxTokensPerCall: c.maxTokens,
-        timeoutMs: c.timeoutMs,
-        minAgreementScore: c.minAgreementScore,
-      },
+      config: decodeConfig(c),
       createdAt: c.createdAt.getTime(),
     }));
   },
@@ -263,23 +254,58 @@ export const prismaStore: Store = {
       id: c.id,
       name: c.name,
       profile: c.profile as StoredConfig["profile"],
-      config: {
-        profile: c.profile as StoredConfig["profile"],
-        orchestrator: { provider: "mock", model: "orchestrator" },
-        analysts: [{ provider: "mock", model: "analyst" }],
-        consensus: { provider: "mock", model: "consensus" },
-        synthesis: { provider: "mock", model: "synthesis" },
-        maxRounds: c.maxRounds,
-        maxBudgetCents: c.maxBudgetCents,
-        maxTokensPerCall: c.maxTokens,
-        timeoutMs: c.timeoutMs,
-        minAgreementScore: c.minAgreementScore,
-      },
+      config: decodeConfig(c),
       createdAt: c.createdAt.getTime(),
     };
+  },
+
+  async setActiveConfig(ref) {
+    const { userId } = await ensureUser();
+    await getPrisma().user.update({
+      where: { id: userId },
+      data: { activeConfig: ref as unknown as object },
+    });
+  },
+
+  async getActiveConfig() {
+    const { userId } = await ensureUser();
+    const user = await getPrisma().user.findUnique({ where: { id: userId } });
+    const ref = user?.activeConfig as ActiveConfig | null;
+    if (ref && ref.type === "profile" && (ref.profile === "economical" || ref.profile === "best")) return ref;
+    if (ref && ref.type === "saved" && typeof ref.id === "string") return ref;
+    return { ...DEFAULT_ACTIVE_CONFIG };
   },
 };
 
 function mask(encryptedKey: string): string {
   return `••••${encryptedKey.slice(-4)}`;
+}
+
+type ConfigRow = {
+  profile: string;
+  configJson: unknown;
+  maxRounds: number;
+  maxBudgetCents: number;
+  maxTokens: number;
+  timeoutMs: number;
+  minAgreementScore: number;
+};
+
+function decodeConfig(c: ConfigRow) {
+  const json = c.configJson as { orchestrator?: unknown; analysts?: unknown } | null;
+  if (json && json.orchestrator && Array.isArray(json.analysts)) {
+    return json as unknown as StoredConfig["config"];
+  }
+  return {
+    profile: c.profile as StoredConfig["profile"],
+    orchestrator: { provider: "mock", model: "orchestrator" },
+    analysts: [{ provider: "mock", model: "analyst" }],
+    consensus: { provider: "mock", model: "consensus" },
+    synthesis: { provider: "mock", model: "synthesis" },
+    maxRounds: c.maxRounds,
+    maxBudgetCents: c.maxBudgetCents,
+    maxTokensPerCall: c.maxTokens,
+    timeoutMs: c.timeoutMs,
+    minAgreementScore: c.minAgreementScore,
+  } satisfies StoredConfig["config"];
 }

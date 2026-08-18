@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { StoredConversation, StoredMessage } from "@/lib/store";
-import type { Profile } from "@/contracts/workflow";
-import { getProfile } from "@/config/profiles";
+import type { StoredConfig, StoredConversation, StoredMessage } from "@/lib/store";
+import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
+import { resolveActiveRef } from "@/config/profiles";
 import {
   askQuestion,
   deleteConversation,
@@ -12,6 +12,7 @@ import {
   listAllConversations,
   listProvidersStatus,
   renameConversation,
+  setActiveConfiguration,
 } from "@/app/actions";
 import { Sidebar } from "./Sidebar";
 import { EmptyState } from "./EmptyState";
@@ -31,17 +32,19 @@ export function AppShell({
   initialConversations,
   authEnabled,
   providersStatus,
-  demo,
+  initialActive,
+  savedConfigs,
 }: {
   initialConversations: StoredConversation[];
   authEnabled: boolean;
   providersStatus: ProviderStatus[];
-  demo?: boolean;
+  initialActive: ActiveConfig;
+  savedConfigs: StoredConfig[];
 }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
-  const [profile, setProfile] = useState<Profile>("economical");
+  const [activeRef, setActiveRef] = useState<ActiveConfig>(initialActive);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,13 +60,23 @@ export function AppShell({
   const stickToBottom = useRef(true);
   const [showJump, setShowJump] = useState(false);
 
-  const missing = useMissingProviders(profile, providersStatus);
+  const activeConfig: OrchestrationConfig = resolveActiveRef(activeRef, savedConfigs);
+  const missing = useMissingProviders(activeConfig, providersStatus);
   const showBanner = !bannerDismissed && missing.length > 0;
   const hasConversation = selectedId !== null && messages.length > 0;
   const isEmpty = messages.length === 0;
 
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
+  }
+
+  async function handleConfigChange(ref: ActiveConfig) {
+    setActiveRef(ref);
+    try {
+      await setActiveConfiguration({ ref });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Erreur", "info");
+    }
   }
 
   useEffect(() => {
@@ -141,7 +154,7 @@ export function AppShell({
     abortRef.current = false;
     setRunKey((k) => k + 1);
     try {
-      const res = await askQuestion({ question, profile, conversationId: selectedId ?? undefined });
+      const res = await askQuestion({ question, configRef: activeRef, conversationId: selectedId ?? undefined });
       if (abortRef.current) return;
       setSelectedId(res.conversationId);
       await refreshConversation(res.conversationId);
@@ -224,7 +237,6 @@ export function AppShell({
         onRename={handleRename}
         onDelete={handleDelete}
         authEnabled={authEnabled}
-        demo={demo}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -249,7 +261,7 @@ export function AppShell({
           <div className="flex items-center gap-1.5 border-b border-warning/30 bg-warning-soft px-3 py-1.5 text-xs text-warning sm:px-4">
             <InfoIcon size={14} className="shrink-0" />
             <span className="min-w-0 flex-1">
-              {missing.length === getProfile(profile).analysts.length + 1
+              {missing.length === activeConfig.analysts.length
                 ? "Mode démo actif · Les analyses sont simulées"
                 : `Clé API manquante : ${missing.join(", ")} — modèle simulé`}
             </span>
@@ -270,8 +282,9 @@ export function AppShell({
               onSubmit={() => submit(question)}
               busy={busy}
               onStop={stopAnalysis}
-              profile={profile}
-              setProfile={setProfile}
+              activeRef={activeRef}
+              savedConfigs={savedConfigs}
+              onConfigChange={handleConfigChange}
             />
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -322,8 +335,9 @@ export function AppShell({
                 onSubmit={() => submit(question)}
                 busy={busy}
                 onStop={stopAnalysis}
-                profile={profile}
-                setProfile={setProfile}
+                activeRef={activeRef}
+                savedConfigs={savedConfigs}
+                onConfigChange={handleConfigChange}
               />
               {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             </div>
@@ -353,10 +367,9 @@ export function AppShell({
   );
 }
 
-function useMissingProviders(profile: Profile, providersStatus: ProviderStatus[]): string[] {
+function useMissingProviders(config: OrchestrationConfig, providersStatus: ProviderStatus[]): string[] {
   const configured = new Set<string>(providersStatus.filter((p) => p.enabled).map((p) => p.provider));
-  const cfg = getProfile(profile);
-  const used = [cfg.orchestrator, ...cfg.analysts]
+  const used = [config.orchestrator, ...config.analysts]
     .filter((s) => s.provider !== "mock")
     .map((s) => s.provider);
   return [...new Set(used.filter((p) => !configured.has(p)))];

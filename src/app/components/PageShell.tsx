@@ -14,14 +14,12 @@ export function PageShell({
   authEnabled,
   children,
   actions,
-  demo,
 }: {
   title: string;
   conversations: StoredConversation[];
   authEnabled: boolean;
   children: React.ReactNode;
   actions?: React.ReactNode;
-  demo?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,7 +57,6 @@ export function PageShell({
         onDelete={handleDelete}
         authEnabled={authEnabled}
         activeHref={pathname}
-        demo={demo}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">

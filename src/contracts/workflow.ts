@@ -3,6 +3,14 @@ import type { AnalystDossier } from "./research";
 
 export type Profile = "economical" | "best" | "custom";
 
+export type ProfileRef = "economical" | "best";
+
+export type ActiveConfig =
+  | { type: "profile"; profile: ProfileRef }
+  | { type: "saved"; id: string };
+
+export const DEFAULT_ACTIVE_CONFIG: ActiveConfig = { type: "profile", profile: "economical" };
+
 export interface OrchestrationConfig {
   profile: Profile;
   orchestrator: ModelSpec;
