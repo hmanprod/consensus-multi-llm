@@ -4,14 +4,14 @@ Instructions de travail pour les agents IA sur ce projet.
 
 ## Vue d'ensemble
 
-Application web qui orchestre plusieurs modèles LLM pour produire un **consensus B2** : plusieurs analystes répondent indépendamment, un système de consensus compare les avis, détecte accords/désaccords, déclenche éventuellement un round ciblé, puis un arbitre final rédige la synthèse.
+Application web qui orchestre plusieurs modèles LLM pour produire une synthèse multi-analyses : un orchestrateur produit une analyse initiale, plusieurs analystes répondent indépendamment, l'orchestrateur consolide leurs réponses, les analystes les révisent, puis une synthèse finale est générée.
 
-Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan soumis à validation, aucun développement fonctionnel engagé).
+Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan de référence et distinction entre cible et implémentation actuelle).
 
 ## État actuel
 
 - **Phase 0 — Cadrage** : plan d'implémentation validé.
-- **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter/mock, orchestrateur A0→A1→B1→B2→B3→C, budget/coûts, timeline).
+- **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter/mock, orchestrateur A→B→S→R→F, budget/coûts, timeline).
 - **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres, Clerk scaffoldé (env-gated : actif si `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`, données liées à l'utilisateur via AsyncLocalStorage).
 - Mode démo par défaut (provider `mock`, aucun coût) tant qu'aucune clé API n'est configurée ; une clé enregistrée active le provider correspondant.
 - La prochaine étape recommandée : appliquer la migration Neon (`npx prisma migrate deploy`) et configurer Clerk (dashboard + env).
@@ -19,9 +19,9 @@ Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan sou
 ## Décisions structurantes (à respecter)
 
 - Orchestrateur **configurable** comme composant central.
-- Modèles interchangeables par rôle (orchestrateur, analystes, critique, consensus B2, synthèse finale).
-- Workflow : **A0** compréhension → **A1** analyses parallèles → **B1** comparaison → **B2** consensus → **B3** round ciblé (max 1) → **C** synthèse finale.
-- B2 n'est pas un simple vote : il distingue formulation, hypothèse, désaccord factuel et désaccord qui change la conclusion.
+- Modèles interchangeables par rôle configuré (orchestrateur, analystes, consensus et synthèse ; les rôles critique et ciblé sont réservés aux évolutions du workflow).
+- Workflow actuel : **A** analyse orchestrateur → **B** analyses parallèles → **S** consolidation → **R** révisions parallèles → **F** synthèse finale.
+- Le rapport structuré de la synthèse contient accords, désaccords, limites et prochaine étape, mais B1/B2/B3 ne sont pas encore des étapes autonomes.
 - **Neon PostgreSQL + Prisma** pour les données.
 - **Clerk** pour l'authentification (MVP).
 - **Model Gateway provider-agnostic** : l'orchestrateur n'appelle jamais directement un fournisseur.
@@ -64,9 +64,9 @@ Outilillage installé (scaffold Next.js 16 + Prisma 7) :
 
 ## Pour démarrer
 
-1. Valider le plan dans `docs/plan-implementation-consensus-multi-llm.md`.
-2. Produire la spécification technique (arborescence, contrats TypeScript du Model Gateway, schéma Prisma, routes serveur, maquettes).
-3. Implémenter Phase 1 — Moteur technique (Model Gateway, adapters, appels parallèles, B1, B2, round ciblé).
+1. Consulter `docs/plan-implementation-consensus-multi-llm.md` et vérifier les écarts avec le code.
+2. Pour faire évoluer le moteur, produire ou mettre à jour la spécification technique (contrats, schéma de données, routes serveur et maquettes).
+3. Implémenter séparément les étapes B1, B2 et B3 si cette évolution est validée.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

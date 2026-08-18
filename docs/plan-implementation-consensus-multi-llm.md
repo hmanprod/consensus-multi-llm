@@ -1,5 +1,7 @@
 # Plan d’implémentation — Consensus Multi-LLM
 
+> **État au 18 août 2026.** Ce document décrit la cible fonctionnelle historique. Le moteur actuellement implémenté suit `A → B → S → R → F` : analyse initiale de l’orchestrateur, analyses parallèles, consolidation, révisions parallèles, puis synthèse finale. Les étapes B1 (comparaison), B2 (consensus explicite) et B3 (round ciblé) décrites ci-dessous restent à implémenter comme étapes distinctes.
+
 **Statut :** plan soumis à validation avant développement  
 **Date :** 16 août 2026
 
@@ -265,15 +267,16 @@ Appels : 7
 
 ## 13. Observabilité
 
+La timeline actuelle doit refléter `A → B → S → R → F`. L’exemple `A0 → A1 → B1 → B2 → B3 → C` ci-dessous représente la cible après implémentation des étapes de comparaison, consensus et round ciblé.
+
 Chaque workflow doit produire une timeline :
 
 ```text
-A0 compréhension       terminé — 1,2 s
-A1 analyses            4 appels parallèles — 8,4 s
-B1 comparaison         terminé — 2,1 s
-B2 consensus           désaccord détecté — 3,0 s
-B3 round ciblé         terminé — 5,6 s
-C synthèse finale      terminé — 2,8 s
+A analyse orchestrateur terminé — 1,2 s
+B analyses              3 appels parallèles — 8,4 s
+S consolidation         terminée — 2,1 s
+R révisions             3 appels parallèles — 5,6 s
+F synthèse finale       terminée — 2,8 s
 ```
 
 Métriques à suivre : durée, tokens, coût par modèle, erreurs, retries, fallbacks, nombre de rounds, score de consensus, taux d’arrêt précoce et feedback utilisateur.

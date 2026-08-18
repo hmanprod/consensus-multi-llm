@@ -325,7 +325,7 @@ Tableau ou cartes par analyste :
 
 ### Workflow
 
-Présenter A0 → A1 → B1 → B2 → B3 → C sous forme de timeline compacte avec :
+Dans l’interface actuelle, présenter le workflow implémenté **A → B → S → R → F** sous forme de timeline compacte avec :
 
 - statut ;
 - durée ;
@@ -340,7 +340,9 @@ Présenter A0 → A1 → B1 → B2 → B3 → C sous forme de timeline compacte 
 - Tokens.
 - Durée totale.
 - Nombre de modèles.
-- Éventuels rounds ciblés.
+- éventuels rounds ciblés, lorsqu’ils seront implémentés ;
+
+Le workflow cible **A0 → A1 → B1 → B2 → B3 → C** pourra remplacer cette timeline lorsque les étapes B1, B2 et B3 seront effectivement séparées dans le moteur.
 
 ## 10. Modèle de données UI
 

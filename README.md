@@ -1,19 +1,20 @@
 # Consensus Multi-LLM
 
-Application web qui orchestre plusieurs modèles LLM pour produire un **consensus B2** : plusieurs analystes répondent indépendamment, un système de consensus compare les avis, détecte accords/désaccords, déclenche éventuellement un round ciblé, puis un arbitre final rédige la synthèse.
+Application web qui orchestre plusieurs modèles LLM pour produire une synthèse multi-analyses : un orchestrateur produit une analyse initiale, plusieurs analystes répondent indépendamment, l'orchestrateur consolide leurs réponses, les analystes les révisent, puis une synthèse finale est générée.
 
 Documentation de référence : `docs/plan-implementation-consensus-multi-llm.md`.
 
 ## Fonctionnement
 
-Workflow **A0 → A1 → B1 → B2 → B3 → C** :
+Workflow actuellement implémenté **A → B → S → R → F** :
 
-- **A0** — l'orchestrateur comprend la question et prépare le plan ;
-- **A1** — les analystes répondent en parallèle, sans se voir ;
-- **B1** — comparaison : convergences, contradictions, idées uniques ;
-- **B2** — consensus : score d'accord, confiance, désaccords classés (formulation, hypothèse, factuel, changeant la conclusion) ;
-- **B3** — round ciblé (max 1) : seuls les analystes concernés réexaminent un désaccord important ;
-- **C** — synthèse finale rédigée par l'arbitre.
+- **A** — l'orchestrateur produit une analyse indépendante initiale ;
+- **B** — les analystes produisent leurs analyses en parallèle, sans se voir ;
+- **S** — l'orchestrateur consolide séquentiellement l'analyse A et les analyses B ;
+- **R** — les analystes révisent leur analyse à partir de la consolidation ;
+- **F** — l'orchestrateur produit la synthèse finale et le rapport structuré.
+
+Le workflow cible historique **A0 → A1 → B1 → B2 → B3 → C** reste documenté comme évolution future. La comparaison B1, le consensus B2 explicite et le round ciblé B3 ne sont pas encore des étapes distinctes du moteur actuel.
 
 ## Démarrage
 
@@ -33,7 +34,7 @@ Une clé enregistrée active le provider correspondant ; les rôles sans clé ba
 ## Profils
 
 - **Économique** : modèles rapides, sans round ciblé.
-- **Équilibré** : diversité de modèles, consensus systématique, round ciblé conditionnel.
+- **Équilibré** : diversité de modèles et consolidation systématique.
 - **Personnalisé** : sélection manuelle par rôle (à venir).
 
 ## Architecture
