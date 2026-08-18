@@ -1,19 +1,16 @@
-import Link from "next/link";
-import { listSavedConfigs } from "@/app/actions";
+import { listAllConversations, listSavedConfigs } from "@/app/actions";
+import { PageShell } from "@/app/components/PageShell";
+import { MOCK_MODE } from "@/config/profiles";
+import { authEnabled } from "@/lib/user-context";
 import { ConfigurationsClient } from "./ConfigurationsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfigurationsPage() {
-  const saved = await listSavedConfigs();
+  const [saved, conversations] = await Promise.all([listSavedConfigs(), listAllConversations()]);
   return (
-    <>
-      <p className="mx-auto mt-6 max-w-2xl px-6">
-        <Link href="/" className="text-sm text-ink-secondary hover:text-ink">
-          ← Retour
-        </Link>
-      </p>
-      <ConfigurationsClient initial={saved} />
-    </>
+    <PageShell title="Configurations" conversations={conversations} authEnabled={authEnabled()}>
+      <ConfigurationsClient initial={saved} demo={MOCK_MODE} />
+    </PageShell>
   );
 }

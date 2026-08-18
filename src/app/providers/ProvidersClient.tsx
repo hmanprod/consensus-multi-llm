@@ -5,13 +5,17 @@ import { listProvidersStatus, saveApiKey, testProviderConnection } from "@/app/a
 import { MODELS_BY_PROVIDER, PROVIDER_LABELS } from "@/config/models";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
-import { CheckIcon } from "@/app/components/ui/icons";
+import { CheckIcon, ChevronDownIcon } from "@/app/components/ui/icons";
 
 export type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 
 function formatDate(ts: number | null): string | null {
   if (!ts) return null;
   return new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function providerModelLabel(provider: string): string | null {
+  return MODELS_BY_PROVIDER[provider]?.[0]?.label ?? null;
 }
 
 export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
@@ -47,33 +51,87 @@ export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
     }
   }
 
-  const rows = providers.filter((p) => p.provider !== "mock");
+  const sorted = [...providers]
+    .filter((p) => p.provider !== "mock")
+    .sort((a, b) => {
+      if (a.needed !== b.needed) return a.needed ? -1 : 1;
+      return PROVIDER_LABELS[a.provider].localeCompare(PROVIDER_LABELS[b.provider]);
+    });
+
+  const configured = sorted.filter((p) => p.enabled);
+  const available = sorted.filter((p) => !p.enabled);
+  const requiredMissing = available.filter((p) => p.needed);
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Providers</h1>
       <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
         Les clés API sont chiffrées côté serveur et ne sont jamais stockées en clair. Une clé
         enregistrée active le provider correspondant pour vos analyses.
       </p>
 
-      <div className="mt-8 space-y-4">
-        {rows.map((p) => (
-          <ProviderCard
-            key={p.provider}
-            status={p}
-            busy={busy === p.provider}
-            lastResult={result?.provider === p.provider ? result : null}
-            onSave={(key) => saveKey(p.provider, key)}
-            onTest={() => test(p.provider)}
-          />
-        ))}
-      </div>
+      {requiredMissing.length > 0 && (
+        <div className="mt-6 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm">
+          <p className="font-medium text-warning">
+            {requiredMissing.length === 1
+              ? "1 provider requis n&apos;est pas configuré"
+              : `${requiredMissing.length} providers requis ne sont pas configurés`}
+          </p>
+          <p className="mt-1 leading-relaxed text-ink-secondary">
+            Les providers marqués <span className="font-medium text-warning">Requis</span> sont
+            utilisés par votre configuration actuelle. Tant que leur clé n&apos;est pas enregistrée,
+            les analyses correspondantes sont simulées en mode démo.
+          </p>
+        </div>
+      )}
+
+      {configured.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Providers configurés
+          </h2>
+          <div className="space-y-3">
+            {configured.map((p) => (
+              <ConfiguredProvider
+                key={p.provider}
+                status={p}
+                busy={busy === p.provider}
+                lastResult={result?.provider === p.provider ? result : null}
+                onSave={(key) => saveKey(p.provider, key)}
+                onTest={() => test(p.provider)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mt-8">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          Providers disponibles
+        </h2>
+        <div className="space-y-2">
+          {available.length === 0 ? (
+            <p className="rounded-xl border border-border bg-bg px-4 py-3 text-sm text-ink-secondary">
+              Tous les providers sont configurés.
+            </p>
+          ) : (
+            available.map((p) => (
+              <AvailableProvider
+                key={p.provider}
+                status={p}
+                busy={busy === p.provider}
+                lastResult={result?.provider === p.provider ? result : null}
+                onSave={(key) => saveKey(p.provider, key)}
+              />
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
 
-function ProviderCard({
+function ConfiguredProvider({
   status,
   busy,
   lastResult,
@@ -86,61 +144,148 @@ function ProviderCard({
   onSave: (key: string) => void;
   onTest: () => void;
 }) {
+  const [showReplace, setShowReplace] = useState(false);
   const [key, setKey] = useState("");
-  const enabled = status.enabled;
-  const model = MODELS_BY_PROVIDER[status.provider]?.[0];
+  const model = providerModelLabel(status.provider);
+  const updated = formatDate(status.updatedAt);
 
   return (
     <div className="rounded-xl border border-border bg-bg p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-ink">{PROVIDER_LABELS[status.provider] ?? status.provider}</span>
-          {enabled ? (
-            <Badge tone="success">
-              <CheckIcon size={11} />
-              Configuré
-            </Badge>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium text-ink">{PROVIDER_LABELS[status.provider]}</span>
+          <Badge tone="success">
+            <CheckIcon size={11} />
+            Configuré
+          </Badge>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={onTest} disabled={busy}>
+            {busy ? "…" : "Tester"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowReplace((v) => !v)} aria-expanded={showReplace}>
+            Remplacer
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
+        {model && <span>Modèle : {model}</span>}
+        {status.maskedKey && <span className="font-mono">{status.maskedKey}</span>}
+        {updated && <span>· Mise à jour le {updated}</span>}
+      </div>
+
+      {showReplace && (
+        <KeyForm
+          label={`Remplacer la clé ${PROVIDER_LABELS[status.provider]}`}
+          placeholder="sk-…"
+          busy={busy}
+          lastResult={lastResult}
+          onSave={onSave}
+          value={key}
+          onChange={setKey}
+        />
+      )}
+    </div>
+  );
+}
+
+function AvailableProvider({
+  status,
+  busy,
+  lastResult,
+  onSave,
+}: {
+  status: ProviderStatus;
+  busy: boolean;
+  lastResult: { ok: boolean; detail: string } | null;
+  onSave: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState("");
+  const model = providerModelLabel(status.provider);
+  const needsAction = status.needed;
+
+  return (
+    <div
+      className={`rounded-xl border p-3.5 transition-colors ${
+        needsAction ? "border-warning/40 bg-warning-soft/40" : "border-border bg-bg"
+      }`}
+    >
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium text-ink">{PROVIDER_LABELS[status.provider]}</span>
+          {needsAction ? (
+            <Badge tone="warning">Requis · à configurer</Badge>
           ) : (
             <Badge tone="neutral">Non configuré</Badge>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-ink-faint">
-          {model && <span>Modèle : {model.label}</span>}
-          {status.maskedKey && <span className="font-mono">{status.maskedKey}</span>}
-        </div>
-      </div>
+        <span className="flex shrink-0 items-center gap-2 text-xs text-ink-faint">
+          {model && <span className="hidden sm:inline">{model}</span>}
+          <ChevronDownIcon size={15} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
 
-      {enabled && status.updatedAt && (
-        <p className="mt-2 text-xs text-ink-faint">Dernière mise à jour : {formatDate(status.updatedAt)}</p>
-      )}
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSave(key);
-        }}
-        className="mt-3 flex flex-wrap items-center gap-2"
-      >
-        <input
-          type="password"
+      {open && (
+        <KeyForm
+          label={`Clé API ${PROVIDER_LABELS[status.provider]}`}
+          placeholder="sk-…"
+          busy={busy}
+          lastResult={lastResult}
+          onSave={onSave}
           value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder={enabled ? "Remplacer la clé…" : "sk-…"}
-          autoComplete="off"
-          aria-label={`Clé API ${PROVIDER_LABELS[status.provider] ?? status.provider}`}
-          className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+          onChange={setKey}
         />
-        <Button type="submit" variant="secondary" size="sm" disabled={busy || !key.trim()}>
-          {busy ? "…" : "Enregistrer"}
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onTest} disabled={busy || !enabled}>
-          {busy ? "…" : "Tester"}
-        </Button>
-      </form>
-
-      {lastResult && (
-        <p className={`mt-2 text-sm ${lastResult.ok ? "text-success" : "text-danger"}`}>{lastResult.detail}</p>
       )}
     </div>
+  );
+}
+
+function KeyForm({
+  label,
+  placeholder,
+  busy,
+  lastResult,
+  onSave,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  busy: boolean;
+  lastResult: { ok: boolean; detail: string } | null;
+  onSave: (key: string) => void;
+  value: string;
+  onChange: (s: string) => void;
+}) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(value);
+      }}
+      className="mt-3 flex flex-wrap items-center gap-2"
+    >
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        aria-label={label}
+        className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+      />
+      <Button type="submit" variant="primary" size="sm" disabled={busy || !value.trim()}>
+        {busy ? "…" : "Enregistrer"}
+      </Button>
+      {lastResult && (
+        <p className={`w-full text-sm ${lastResult.ok ? "text-success" : "text-danger"}`}>{lastResult.detail}</p>
+      )}
+    </form>
   );
 }

@@ -47,6 +47,7 @@ export function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [output, setOutput] = useState<OutputState | null>(null);
+  const [lastOutputTab, setLastOutputTab] = useState<OutputPanelTab>("summary");
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [runKey, setRunKey] = useState(0);
   const abortRef = useRef(false);
@@ -58,7 +59,6 @@ export function AppShell({
   const showBanner = !bannerDismissed && missing.length > 0;
   const hasConversation = selectedId !== null && messages.length > 0;
   const isEmpty = messages.length === 0;
-  const analystCount = getProfile(profile).analysts.length;
 
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
@@ -198,7 +198,7 @@ export function AppShell({
     );
   }
 
-  function openOutput(runId: string, activeTab: OutputPanelTab = "summary") {
+  function openOutput(runId: string, activeTab: OutputPanelTab = lastOutputTab) {
     setOutput({ runId, activeTab });
   }
 
@@ -229,6 +229,7 @@ export function AppShell({
           <IconButton
             label="Ouvrir le menu"
             className="lg:hidden"
+            aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen(true)}
           >
             <MenuIcon size={16} />
@@ -236,28 +237,24 @@ export function AppShell({
           <h1 className="min-w-0 truncate text-sm font-medium text-ink">
             {hasConversation ? selectedTitle : "Nouvelle conversation"}
           </h1>
-          <button
-            onClick={newConversation}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface"
-          >
-            <PlusIcon size={13} />
-            Nouvelle
-          </button>
+          <IconButton label="Nouvelle conversation" onClick={newConversation} className="ml-auto">
+            <PlusIcon size={16} />
+          </IconButton>
         </header>
 
         {showBanner && (
-          <div className="flex items-center gap-2 border-b border-warning/30 bg-warning-soft px-4 py-2 text-sm text-warning">
-            <InfoIcon size={15} className="shrink-0" />
-            <span className="flex-1">
+          <div className="flex items-center gap-1.5 border-b border-warning/30 bg-warning-soft px-3 py-1.5 text-xs text-warning sm:px-4">
+            <InfoIcon size={14} className="shrink-0" />
+            <span className="min-w-0 flex-1">
               {missing.length === getProfile(profile).analysts.length + 1
                 ? "Mode démo actif · Les analyses sont simulées"
                 : `Clé API manquante : ${missing.join(", ")} — modèle simulé`}
             </span>
             <Link href="/providers" className="shrink-0 font-medium underline hover:opacity-80">
-              Configurer les providers
+              Configurer
             </Link>
             <IconButton label="Fermer la notification" onClick={() => setBannerDismissed(true)}>
-              <CloseIcon size={14} />
+              <CloseIcon size={13} />
             </IconButton>
           </div>
         )}
@@ -272,7 +269,6 @@ export function AppShell({
               onStop={stopAnalysis}
               profile={profile}
               setProfile={setProfile}
-              analystCount={analystCount}
             />
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -325,7 +321,6 @@ export function AppShell({
                 onStop={stopAnalysis}
                 profile={profile}
                 setProfile={setProfile}
-                analystCount={analystCount}
               />
               {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             </div>
@@ -338,7 +333,10 @@ export function AppShell({
           key={output.runId}
           runId={output.runId}
           activeTab={output.activeTab}
-          onTabChange={(tab) => setOutput((o) => (o ? { ...o, activeTab: tab } : o))}
+          onTabChange={(tab) => {
+            setLastOutputTab(tab);
+            setOutput((o) => (o ? { ...o, activeTab: tab } : o));
+          }}
           onClose={closeOutput}
         />
       )}

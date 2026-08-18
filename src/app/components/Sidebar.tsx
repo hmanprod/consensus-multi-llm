@@ -57,6 +57,7 @@ export function Sidebar({
   onRename,
   onDelete,
   authEnabled,
+  activeHref,
 }: {
   conversations: StoredConversation[];
   selectedId: string | null;
@@ -69,6 +70,7 @@ export function Sidebar({
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   authEnabled: boolean;
+  activeHref?: string;
 }) {
   const [query, setQuery] = useState("");
 
@@ -92,6 +94,7 @@ export function Sidebar({
       onRename={onRename}
       onDelete={onDelete}
       authEnabled={authEnabled}
+      activeHref={activeHref}
     />
   );
 
@@ -106,6 +109,7 @@ export function Sidebar({
         <button
           onClick={onToggleCollapse}
           aria-label={collapsed ? "Agrandir la barre latérale" : "Réduire la barre latérale"}
+          aria-expanded={!collapsed}
           className="flex items-center justify-center border-t border-border py-2 text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink"
         >
           {collapsed ? <ChevronRightIcon size={16} /> : <ChevronLeftIcon size={16} />}
@@ -119,7 +123,12 @@ export function Sidebar({
             onClick={onCloseMobile}
             aria-hidden="true"
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)] shadow-lg">
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Navigation"
+            className="absolute inset-y-0 left-0 flex w-[300px] max-w-[85vw] flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)] shadow-lg"
+          >
             {body}
             <button
               onClick={onCloseMobile}
@@ -147,6 +156,7 @@ function SidebarContent({
   onRename,
   onDelete,
   authEnabled,
+  activeHref,
 }: {
   conversations: StoredConversation[];
   groups: Group[];
@@ -159,6 +169,7 @@ function SidebarContent({
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   authEnabled: boolean;
+  activeHref?: string;
 }) {
   if (collapsed) {
     return (
@@ -243,20 +254,20 @@ function SidebarContent({
 
       <div className="border-t border-border px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
         <AuthRow enabled={authEnabled} />
-        <div className="mt-2 flex flex-col gap-0.5">
-          <SidebarLink href="/configurations">
-            <LayersIcon size={15} />
-            Configurations
-          </SidebarLink>
-          <SidebarLink href="/providers">
-            <PanelIcon size={15} />
-            Providers
-          </SidebarLink>
-          <SidebarLink href="/parametres">
-            <SettingsIcon size={15} />
-            Paramètres
-          </SidebarLink>
-        </div>
+      <div className="mt-2 flex flex-col gap-0.5">
+        <SidebarLink href="/configurations" active={activeHref === "/configurations"}>
+          <LayersIcon size={15} />
+          Configurations
+        </SidebarLink>
+        <SidebarLink href="/providers" active={activeHref === "/providers"}>
+          <PanelIcon size={15} />
+          Providers
+        </SidebarLink>
+        <SidebarLink href="/parametres" active={activeHref === "/parametres"}>
+          <SettingsIcon size={15} />
+          Paramètres
+        </SidebarLink>
+      </div>
       </div>
     </>
   );
@@ -431,11 +442,14 @@ function MenuItem({ children, danger, onClick }: { children: React.ReactNode; da
   );
 }
 
-function SidebarLink({ href, children }: { href: string; children: React.ReactNode }) {
+function SidebarLink({ href, children, active = false }: { href: string; children: React.ReactNode; active?: boolean }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
+      aria-current={active ? "page" : undefined}
+      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
+        active ? "bg-surface font-medium text-ink" : "text-ink-secondary hover:bg-surface-hover hover:text-ink"
+      }`}
     >
       {children}
     </Link>
