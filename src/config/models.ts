@@ -11,6 +11,7 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
   qwen: [{ label: "Qwen 3.8 Max", slug: "qwen-3.8-max" }],
   kimi: [{ label: "Kimi K3", slug: "kimi-k3" }],
   glm: [{ label: "GLM 5.3", slug: "glm-5.3" }],
+  xai: [{ label: "Grok 4.6", slug: "grok-4.6" }],
   openrouter: [{ label: "Auto (OpenRouter)", slug: "auto" }],
   mock: [{ label: "Mock (démo)", slug: "mock" }],
 };
@@ -23,6 +24,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   qwen: "Qwen (Alibaba)",
   kimi: "Kimi (Moonshot)",
   glm: "GLM (Zhipu)",
+  xai: "Grok (xAI)",
   openrouter: "OpenRouter",
   mock: "Mock (démo)",
 };
@@ -33,4 +35,5 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   kimi: "https://api.moonshot.cn/v1",
   glm: "https://open.bigmodel.cn/api/paas/v4",
+  xai: "https://api.x.ai/v1",
 };

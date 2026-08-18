@@ -1,7 +1,7 @@
 import type { OrchestrationConfig, Profile } from "@/contracts/workflow";
 
 export const MOCK_MODE = process.env.MOCK_MODE === "true" ||
-  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY);
+  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY);
 
 const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
   economical: {
@@ -18,6 +18,21 @@ const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
     maxTokensPerCall: 2000,
     timeoutMs: 120_000,
     minAgreementScore: 70,
+  },
+  best: {
+    profile: "best",
+    orchestrator: { provider: "openai", model: "chatgpt-5.6" },
+    analysts: [
+      { provider: "anthropic", model: "claude-opus-5" },
+      { provider: "gemini", model: "gemini-3.5-flash" },
+    ],
+    consensus: { provider: "openai", model: "chatgpt-5.6" },
+    synthesis: { provider: "openai", model: "chatgpt-5.6" },
+    maxRounds: 1,
+    maxBudgetCents: 150,
+    maxTokensPerCall: 4000,
+    timeoutMs: 180_000,
+    minAgreementScore: 75,
   },
 };
 

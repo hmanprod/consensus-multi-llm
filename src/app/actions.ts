@@ -10,7 +10,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { getAuthUserId, userStorage } from "@/lib/user-context";
 import type { KnownProvider } from "@/gateway";
 
-const PROFILE_SCHEMA = z.enum(["economical", "custom"]);
+const PROFILE_SCHEMA = z.enum(["economical", "best", "custom"]);
 const PROVIDER_SCHEMA = z.enum(KNOWN_PROVIDERS as unknown as [string, ...string[]]);
 
 export type AskResult = {
@@ -143,7 +143,7 @@ export async function getProfileDescription(profile: string) {
 }
 
 export async function getProfiles() {
-  return (["economical", "custom"] as const).map((p) => ({
+  return (["economical", "best", "custom"] as const).map((p) => ({
     profile: p,
     config: getProfile(p),
     description: describeProfile(p),
@@ -169,6 +169,19 @@ export async function listProvidersStatus() {
     const store = await getStore();
     const credentials = await store.listCredentials();
     const configured = new Set(credentials.map((c) => c.provider));
+
+    const neededSet = new Set<string>();
+    const addSpec = (spec: { provider: string }) => {
+      if (spec.provider !== "mock") neededSet.add(spec.provider);
+    };
+    for (const p of ["economical", "best"] as const) {
+      const base = getProfile(p);
+      [base.orchestrator, base.consensus, base.synthesis, ...base.analysts].forEach(addSpec);
+    }
+    for (const c of await store.listConfigs()) {
+      [c.config.orchestrator, c.config.consensus, c.config.synthesis, ...c.config.analysts].forEach(addSpec);
+    }
+
     return KNOWN_PROVIDERS.map((p) => {
       const cred = credentials.find((c) => c.provider === p);
       const envKey = process.env[`${p.toUpperCase()}_API_KEY`];
@@ -178,6 +191,7 @@ export async function listProvidersStatus() {
         maskedKey: cred?.maskedKey ?? null,
         updatedAt: cred?.updatedAt ?? null,
         source: p === "mock" ? "built-in" : configured.has(p) ? "stored" : envKey ? "env" : null,
+        needed: neededSet.has(p),
       };
     });
   });

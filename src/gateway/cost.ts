@@ -20,6 +20,8 @@ const PRICING: Record<string, Pricing> = {
   "kimi/kimi-k3": { promptPer1M: 0.6, completionPer1M: 2.4 },
   // GLM (Zhipu)
   "glm/glm-5.3": { promptPer1M: 0.5, completionPer1M: 2 },
+  // xAI (Grok)
+  "xai/grok-4.6": { promptPer1M: 2, completionPer1M: 6 },
   // OpenRouter (valeur générique par défaut)
   "openrouter/auto": { promptPer1M: 1, completionPer1M: 3 },
 };

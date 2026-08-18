@@ -1,6 +1,6 @@
 import type { ModelSpec, Usage } from "./gateway";
 
-export type Profile = "economical" | "custom";
+export type Profile = "economical" | "best" | "custom";
 
 export interface OrchestrationConfig {
   profile: Profile;

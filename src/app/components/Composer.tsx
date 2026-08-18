@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { Profile } from "@/contracts/workflow";
-import { SendIcon, StopIcon } from "./ui/icons";
+import { getProfile } from "@/config/profiles";
+import { SendIcon, SettingsIcon, StopIcon } from "./ui/icons";
 
 export function Composer({
   question,
@@ -12,7 +13,6 @@ export function Composer({
   onStop,
   profile,
   setProfile,
-  analystCount,
 }: {
   question: string;
   setQuestion: (s: string) => void;
@@ -21,7 +21,6 @@ export function Composer({
   onStop?: () => void;
   profile: Profile;
   setProfile: (p: Profile) => void;
-  analystCount: number;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const canSubmit = question.trim().length > 0 && !busy;
@@ -41,8 +40,8 @@ export function Composer({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-bg shadow-sm transition-colors focus-within:border-accent">
-      <div className="flex items-end gap-2 p-2.5">
+    <div className="group rounded-xl border border-border-strong bg-bg shadow-sm transition-colors focus-within:border-accent">
+      <div className="flex items-end gap-2 p-2">
         <textarea
           ref={ref}
           value={question}
@@ -51,16 +50,16 @@ export function Composer({
           rows={1}
           placeholder="Posez votre question…"
           aria-label="Votre question"
-          className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-base leading-relaxed text-ink outline-none placeholder:text-ink-faint sm:text-[15px]"
+          className="max-h-40 min-h-[2rem] flex-1 resize-none bg-transparent px-2 py-1 text-base leading-relaxed text-ink outline-none placeholder:text-ink-secondary/70 sm:text-[15px]"
         />
         {busy && onStop ? (
           <button
             onClick={onStop}
             aria-label="Arrêter l'analyse"
             title="Arrêter"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
           >
-            <StopIcon size={16} />
+            <StopIcon size={14} />
           </button>
         ) : (
           <button
@@ -68,26 +67,28 @@ export function Composer({
             disabled={!canSubmit}
             aria-label="Envoyer"
             title="Envoyer (Entrée)"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <SendIcon size={16} />
+            <SendIcon size={14} />
           </button>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2 px-3 pb-2">
-        <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-          Profil
+      <div className="flex items-center justify-between gap-2 border-t border-border px-3 pb-2.5 pt-2">
+        <label className="flex items-center gap-1.5 text-xs text-ink-secondary">
+          <SettingsIcon size={13} className="shrink-0 text-ink-faint" />
           <select
             value={profile}
             onChange={(e) => setProfile(e.target.value as Profile)}
             aria-label="Profil d'analyse"
-            className="rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
+            className="cursor-pointer rounded-md border border-border bg-surface px-2 py-0.5 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
           >
-            <option value="economical">Économique · {analystCount} analystes</option>
-            <option value="custom">Personnalisé</option>
+            <option value="economical">Économique · {getProfile("economical").analysts.length} analystes</option>
+            <option value="best">Best Models · {getProfile("best").analysts.length} analystes</option>
           </select>
         </label>
-        <span className="hidden text-xs text-ink-faint sm:inline">Entrée pour envoyer · Maj + Entrée pour nouvelle ligne</span>
+        <span className="hidden text-[11px] text-ink-faint opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 sm:inline">
+          Entrée pour envoyer · Maj + Entrée pour nouvelle ligne
+        </span>
       </div>
     </div>
   );

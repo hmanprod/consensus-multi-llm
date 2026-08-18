@@ -14,6 +14,7 @@ const DEFAULT_API_KEYS: Record<string, string | undefined> = {
   qwen: process.env.QWEN_API_KEY,
   kimi: process.env.KIMI_API_KEY,
   glm: process.env.GLM_API_KEY,
+  xai: process.env.XAI_API_KEY,
   openrouter: process.env.OPENROUTER_API_KEY,
 };
 
@@ -25,6 +26,7 @@ export const KNOWN_PROVIDERS = [
   "qwen",
   "kimi",
   "glm",
+  "xai",
   "openrouter",
   "mock",
 ] as const;
