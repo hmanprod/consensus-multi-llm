@@ -66,7 +66,7 @@ export function SettingsContent({
                 {demo && <Badge tone="warning">Démo</Badge>}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-                {activeConfig.analysts.length} analystes indépendants, puis une comparaison et une synthèse finale.
+                {activeConfig.analysts.length + 1} analystes (orchestrateur inclus), puis une comparaison et une synthèse finale.
               </p>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-secondary">
                 <span>

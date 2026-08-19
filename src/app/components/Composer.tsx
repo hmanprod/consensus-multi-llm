@@ -98,7 +98,7 @@ export function Composer({
             )}
             {savedConfigs.map((c) => (
               <option key={c.id} value={`saved:${c.id}`}>
-                {c.name} · {c.config.analysts.length} analystes
+                {c.name} · {c.config.analysts.length + 1} analystes
               </option>
             ))}
           </select>

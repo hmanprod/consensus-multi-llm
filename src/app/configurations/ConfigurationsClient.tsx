@@ -655,7 +655,7 @@ function ConfigCard({
             </div>
           )}
           <p className="mt-1 text-xs text-ink-secondary">
-            {config.config.analysts.length} analystes · budget max {formatBudget(config.config.maxBudgetCents)} · ≈{" "}
+            {config.config.analysts.length + 1} analystes · budget max {formatBudget(config.config.maxBudgetCents)} · ≈{" "}
             {formatEstimatedCost(config.config)} par analyse
           </p>
         </div>
