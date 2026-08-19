@@ -67,6 +67,7 @@ export interface WorkflowProgress {
   detail?: string;
   durationMs?: number;
   content?: string;
+  model?: ModelSpec;
 }
 
 export interface TimelineEntry {

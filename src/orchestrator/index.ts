@@ -131,7 +131,7 @@ class Orchestrator {
   ): Promise<AnalysisOutput> {
     const step = label as WorkflowStep;
     const t = Date.now();
-    this.emit({ step, status: "searching", label: `Analyse ${label}`, detail: "Recherche en cours" });
+    this.emit({ step, status: "searching", label: `Analyse ${label}`, detail: "Recherche en cours", model: spec });
     try {
       const res = await runAnalystAgent(
         {
@@ -149,12 +149,12 @@ class Orchestrator {
         },
         {
           generate: this.deps.generate,
-          onPhase: (phase) => this.emit({ step, status: phase, label: `Analyse ${label}` }),
+          onPhase: (phase) => this.emit({ step, status: phase, label: `Analyse ${label}`, model: spec }),
         }
       );
       this.account(spec, res.usage, res.latencyMs);
       this.tick(step, `Analyse ${label} (${role})`, "done", Date.now() - t, `${spec.provider}/${spec.model} · ${res.dossier.mode}`);
-      this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t, content: res.dossier.analysis });
+      this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t, content: res.dossier.analysis, model: spec });
       if (index !== undefined) this.lastAnalystTexts[index] = res.dossier.analysis;
       return {
         label,
@@ -168,7 +168,7 @@ class Orchestrator {
     } catch (err) {
       const msg = message(err);
       this.tick(step, `Analyse ${label} (${role})`, "error", Date.now() - t, msg);
-      this.emit({ step, status: "error", label: `Analyse ${label}`, durationMs: Date.now() - t, detail: msg });
+      this.emit({ step, status: "error", label: `Analyse ${label}`, durationMs: Date.now() - t, detail: msg, model: spec });
       if (index !== undefined) this.lastAnalystTexts[index] = `[étape non effectuée : ${msg}]`;
       return {
         label,
@@ -199,7 +199,7 @@ class Orchestrator {
     const label = `${letter}+${fullLabel}`;
     const step = label as WorkflowStep;
     const t = Date.now();
-    this.emit({ step, status: "writing", label: `Révision ${label}` });
+    this.emit({ step, status: "writing", label: `Révision ${label}`, model: spec });
     const res = await this.safeCall(
       spec,
       this.messages(revisionPrompt(letter, this.lastAnalystText(index), fullLabel, fullText))
@@ -212,6 +212,7 @@ class Orchestrator {
       durationMs: Date.now() - t,
       detail: res.error,
       content: res.error ? undefined : res.text,
+      model: spec,
     });
     return {
       label,
@@ -300,10 +301,10 @@ class Orchestrator {
       if (!validAnalystIndices.includes(i)) {
         const skipDetail = "Analyste en échec — analyse ignorée.";
         this.tick(step, `Analyse ${nextLabel} (orchestrateur)`, "skipped", 0, skipDetail);
-        this.emit({ step, status: "skipped", label: `Analyse ${nextLabel}`, detail: skipDetail });
+        this.emit({ step, status: "skipped", label: `Analyse ${nextLabel}`, detail: skipDetail, model: this.config.orchestrator });
         continue;
       }
-      this.emit({ step, status: "writing", label: `Analyse ${nextLabel}` });
+      this.emit({ step, status: "writing", label: `Analyse ${nextLabel}`, model: this.config.orchestrator });
       const tC = Date.now();
       const newRefs = this.toSourceRefs(analystAnalyses[i].dossier?.sources);
       const res = await this.safeCall(
@@ -337,6 +338,7 @@ class Orchestrator {
         durationMs: Date.now() - tC,
         detail: res.error,
         content: res.error ? undefined : res.text,
+        model: this.config.orchestrator,
       });
       currentText = res.text;
       currentLabel = nextLabel;
@@ -358,7 +360,7 @@ class Orchestrator {
       const step = `${letter}+${fullLabel}` as WorkflowStep;
       const skipDetail = "Analyste en échec — révision ignorée.";
       this.tick(step, `Révision ${letter}+${fullLabel} (analyste)`, "skipped", 0, skipDetail);
-      this.emit({ step, status: "skipped", label: `Révision ${letter} + ${fullLabel}`, detail: skipDetail });
+      this.emit({ step, status: "skipped", label: `Révision ${letter} + ${fullLabel}`, detail: skipDetail, model: this.config.analysts[i] });
     }
 
     // S — Consensus (config.consensus)
@@ -366,7 +368,7 @@ class Orchestrator {
       { label: fullLabel, text: fullText },
       ...revisions.map((r) => ({ label: r.label, text: r.text })),
     ];
-    this.emit({ step: "S", status: "writing", label: "Consensus" });
+    this.emit({ step: "S", status: "writing", label: "Consensus", model: this.config.consensus });
     const tS = Date.now();
     const cRes = await this.safeCall(
       this.config.consensus,
@@ -389,10 +391,11 @@ class Orchestrator {
       durationMs: Date.now() - tS,
       detail: cRes.error,
       content: cRes.error ? undefined : consensusText,
+      model: this.config.consensus,
     });
 
     // F — Synthèse finale (config.synthesis)
-    this.emit({ step: "F", status: "writing", label: "Synthèse finale" });
+    this.emit({ step: "F", status: "writing", label: "Synthèse finale", model: this.config.synthesis });
     const tF = Date.now();
     const fRes = await this.safeCall(
       this.config.synthesis,
@@ -414,6 +417,7 @@ class Orchestrator {
       durationMs: Date.now() - tF,
       detail: fRes.error,
       content: fRes.error ? undefined : finalText,
+      model: this.config.synthesis,
     });
 
     return {

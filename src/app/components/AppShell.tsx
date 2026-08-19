@@ -175,6 +175,8 @@ export function AppShell({
       setSelectedId(res.conversationId);
       currentRunIdRef.current = res.runId;
 
+      await refreshConversation(res.conversationId);
+
       await executeRun({ runId: res.runId, question, configRef: activeRef });
 
       const stopPolling = () => {
