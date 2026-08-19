@@ -19,7 +19,7 @@ Prompt prêt à l'emploi pour vérifier, corriger et compléter la table de tari
 - Zhipu GLM (BigModel) : `glm/glm-5.3`
 - xAI Grok : `xai/grok-4.6`
 - Meta (Model API) : `meta/muse-spark-1.2`
-- OpenRouter (routage `auto`) et ses modèles explicites : `openrouter/openai/gpt-5.6-sol`, `openrouter/openai/gpt-5.6-luna`, `openrouter/google/gemini-3.7-flash`, `openrouter/x-ai/grok-4.5`, `openrouter/meta-llama/muse-spark-latest`, `openrouter/deepseek/deepseek-v4-flash`, `openrouter/deepseek/deepseek-v4-pro`, `openrouter/moonshotai/kimi-k3`, `openrouter/qwen/qwen-3.8-max`, `openrouter/anthropic/claude-opus-5`, `openrouter/anthropic/claude-sonnet-5`
+- OpenRouter (routage `auto`) et ses modèles explicites : `openrouter/openai/gpt-5.6-sol`, `openrouter/openai/gpt-5.6-luna`, `openrouter/google/gemini-3.7-flash`, `openrouter/x-ai/grok-4.5`, `openrouter/meta/muse-spark-1.2`, `openrouter/deepseek/deepseek-v4-flash`, `openrouter/deepseek/deepseek-v4-pro`, `openrouter/moonshotai/kimi-k3`, `openrouter/qwen/qwen-3.8-max`, `openrouter/anthropic/claude-opus-5`, `openrouter/anthropic/claude-sonnet-5`
 - ZenMux (routage `auto`) et les mêmes modèles explicites que ci-dessus, en préfixant par `zenmux/` au lieu de `openrouter/`
 
 **Tâches.**
