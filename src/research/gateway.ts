@@ -2,7 +2,7 @@ import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage
 import type { ResearchPolicy, ResearchResult } from "@/contracts/research";
 import { getApiKey } from "@/gateway";
 
-export const NATIVE_SEARCH_PROVIDERS = new Set(["openai", "gemini", "anthropic", "kimi", "xai", "zenmux", "openrouter"]);
+export const NATIVE_SEARCH_PROVIDERS = new Set(["openai", "gemini", "anthropic", "kimi", "xai", "meta", "zenmux", "openrouter"]);
 
 export interface ResearchGatewayDeps {
   generate(req: GenerationRequest): Promise<GenerationResult>;

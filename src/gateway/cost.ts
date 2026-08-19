@@ -23,7 +23,7 @@ const PRICING: Record<string, Pricing> = {
   // xAI (Grok)
   "xai/grok-4.6": { promptPer1M: 2, completionPer1M: 6 },
   // Meta
-  "meta/muse-spark-1.2": { promptPer1M: 0.8, completionPer1M: 3 },
+  "meta/muse-spark-1.2": { promptPer1M: 1.25, completionPer1M: 4.25 },
   // OpenRouter — routage automatique
   "openrouter/auto": { promptPer1M: 1, completionPer1M: 3 },
   // OpenRouter — modèles explicites (prix miroirs des providers directs)

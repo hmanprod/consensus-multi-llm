@@ -7,11 +7,13 @@ import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 const RESPONSES_BASE_URLS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
   xai: "https://api.x.ai/v1",
+  meta: "https://api.meta.ai/v1",
   zenmux: "https://zenmux.ai/api/v1",
 };
 
 const INCLUDE_BY_PROVIDER: Record<string, string[]> = {
   openai: ["web_search_call.results", "web_search_call.action.sources"],
+  meta: ["web_search_call.results"],
   zenmux: ["web_search_call.action.sources"],
 };
 

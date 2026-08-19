@@ -8,6 +8,7 @@ import { OpenRouterAdapter } from "./adapters/openrouter";
 import { OPENAI_COMPATIBLE_BASE_URLS } from "@/config/models";
 
 const RESPONSES_PROVIDERS = new Set(["openai", "xai", "zenmux"]);
+const RESPONSES_ALWAYS = new Set(["meta"]);
 
 const DEFAULT_API_KEYS: Record<string, string | undefined> = {
   openai: process.env.OPENAI_API_KEY,
@@ -65,7 +66,7 @@ export async function getAdapter(spec: ModelSpec, opts?: { search?: boolean }): 
     case "mock":
       return new MockAdapter();
     default: {
-      if (opts?.search && RESPONSES_PROVIDERS.has(spec.provider)) {
+      if (RESPONSES_ALWAYS.has(spec.provider) || (opts?.search && RESPONSES_PROVIDERS.has(spec.provider))) {
         return new OpenAIResponsesAdapter(spec.provider, apiKey);
       }
       const baseUrl = OPENAI_COMPATIBLE_BASE_URLS[spec.provider];
