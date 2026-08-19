@@ -6,6 +6,7 @@ import { getProfile, resolveAvailableSpecs } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
 import { getStore } from "@/lib/store";
+import { clearProgress, getProgress, recordProgress } from "@/lib/progress";
 import { ensureUserSetup } from "@/lib/setup";
 import { encryptSecret } from "@/lib/crypto";
 import { getAuthUserId, userStorage } from "@/lib/user-context";
@@ -22,8 +23,6 @@ const CONFIG_SCHEMA = z.object({
   analysts: z.array(MODEL_SPEC_SCHEMA).min(1).max(3),
   consensus: MODEL_SPEC_SCHEMA,
   synthesis: MODEL_SPEC_SCHEMA,
-  maxRounds: z.number().int().min(0).max(3),
-  maxBudgetCents: z.number().int().min(1).max(100_000),
   maxTokensPerCall: z.number().int().min(256).max(65_536),
   timeoutMs: z.number().int().min(5_000).max(600_000),
   minAgreementScore: z.number().int().min(0).max(100),
@@ -118,7 +117,7 @@ export async function setActiveConfiguration(input: { ref: ActiveConfig }) {
   });
 }
 
-export async function askQuestion(input: {
+export async function startQuestion(input: {
   question: string;
   configRef?: ActiveConfig;
   conversationId?: string;
@@ -129,13 +128,6 @@ export async function askQuestion(input: {
 
   return userStorage.run(await getAuthUserId(), async () => {
     await ensureUserSetup();
-    const refResult = input.configRef ? ACTIVE_CONFIG_SCHEMA.safeParse(input.configRef) : { success: true, data: null };
-    const config = refResult.success && refResult.data
-      ? await resolveConfigRef(refResult.data)
-      : await resolveConfigRef(await getActiveConfigRef());
-
-    await bindStoredKeys();
-
     const store = await getStore();
     let conversationId = input.conversationId;
     let isNewConversation = false;
@@ -147,18 +139,49 @@ export async function askQuestion(input: {
     const run = await store.createRun(conversationId, question);
     await store.addMessage(conversationId, "user", question, run.runId);
 
+    return { runId: run.runId, conversationId, isNewConversation };
+  });
+}
+
+export async function executeRun(input: {
+  runId: string;
+  question: string;
+  configRef?: ActiveConfig;
+}) {
+  return userStorage.run(await getAuthUserId(), async () => {
+    const store = await getStore();
+    const run = await store.getRun(input.runId);
+    if (!run) throw new Error("run_not_found");
+    if (run.status !== "running") return { ok: true };
+
+    const refResult = input.configRef ? ACTIVE_CONFIG_SCHEMA.safeParse(input.configRef) : { success: true, data: null };
+    const config = refResult.success && refResult.data
+      ? await resolveConfigRef(refResult.data)
+      : await resolveConfigRef(await getActiveConfigRef());
+
+    await bindStoredKeys();
+
     try {
-      const result = await runWorkflow(question, config, { generate });
+      const result = await runWorkflow(input.question, config, {
+        generate,
+        onProgress: (progress) => recordProgress(input.runId, progress),
+      });
       await store.setRunResult(run.runId, result);
-      await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, run.runId);
+      await store.addMessage(run.conversationId, "assistant", result.finalSynthesis.text, run.runId);
     } catch (err) {
       const message = err instanceof Error ? err.message : "erreur inconnue";
       await store.failRun(run.runId, message);
-      await store.addMessage(conversationId, "assistant", `Une erreur est survenue : ${message}`, run.runId);
+      await store.addMessage(run.conversationId, "assistant", `Une erreur est survenue : ${message}`, run.runId);
+    } finally {
+      clearProgress(input.runId);
     }
 
-    return { runId: run.runId, conversationId, isNewConversation };
+    return { ok: true };
   });
+}
+
+export async function getRunProgress(runId: string) {
+  return asUser(async () => getProgress(runId));
 }
 
 async function asUser<T>(fn: () => Promise<T>): Promise<T> {

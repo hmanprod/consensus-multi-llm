@@ -12,7 +12,6 @@ import {
   setActiveConfiguration,
   updateCustomConfig,
 } from "@/app/actions";
-import { costLevel, estimateRunCostCents, formatBudget, formatEstimatedCost, isCostKnown } from "@/lib/format";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
 import { ChevronDownIcon, CloseIcon, CopyIcon, PencilIcon, PlusIcon, TrashIcon } from "@/app/components/ui/icons";
@@ -29,10 +28,8 @@ interface Draft {
   analysts: RoleSpec[];
   consensus: RoleSpec;
   synthesis: RoleSpec;
-  maxBudgetCents: number;
   maxTokensPerCall: number;
   timeoutMs: number;
-  maxRounds: number;
   minAgreementScore: number;
   search: boolean;
 }
@@ -50,10 +47,8 @@ function draftFromConfig(config: OrchestrationConfig, name = ""): Draft {
     analysts: config.analysts.map((a) => ({ ...a })),
     consensus: { ...config.consensus },
     synthesis: { ...config.synthesis },
-    maxBudgetCents: config.maxBudgetCents,
     maxTokensPerCall: config.maxTokensPerCall,
     timeoutMs: config.timeoutMs,
-    maxRounds: config.maxRounds,
     minAgreementScore: config.minAgreementScore,
     search: config.search ?? false,
   };
@@ -66,8 +61,6 @@ function draftToConfig(d: Draft): OrchestrationConfig {
     analysts: d.analysts,
     consensus: d.consensus,
     synthesis: d.synthesis,
-    maxRounds: d.maxRounds,
-    maxBudgetCents: d.maxBudgetCents,
     maxTokensPerCall: d.maxTokensPerCall,
     timeoutMs: d.timeoutMs,
     minAgreementScore: d.minAgreementScore,
@@ -238,7 +231,6 @@ export function ConfigurationsClient({
               key={editor.id}
               title="Modifier la configuration"
               initialDraft={draftFromConfigFromSaved(saved, editor.id)}
-              demo={demo}
               busy={busy}
               submitLabel="Enregistrer les modifications"
               onCancel={() => setEditor({ kind: "closed" })}
@@ -248,7 +240,6 @@ export function ConfigurationsClient({
             <ConfigEditor
               title="Nouvelle configuration"
               initialDraft={draftFromConfig(BASE_CFG)}
-              demo={demo}
               busy={busy}
               submitLabel="Créer la configuration"
               onCancel={() => setEditor({ kind: "closed" })}
@@ -297,7 +288,6 @@ function draftFromConfigFromSaved(saved: SavedConfig[], id: string): Draft {
 function ConfigEditor({
   title,
   initialDraft,
-  demo,
   busy,
   submitLabel,
   onCancel,
@@ -305,7 +295,6 @@ function ConfigEditor({
 }: {
   title: string;
   initialDraft: Draft;
-  demo: boolean;
   busy: boolean;
   submitLabel: string;
   onCancel: () => void;
@@ -457,13 +446,6 @@ function ConfigEditor({
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Paramètres</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <NumberField
-            label="Budget maximal (€)"
-            value={draft.maxBudgetCents / 100}
-            onChange={(v) => patch({ maxBudgetCents: Math.round(v * 100) })}
-            min={0.01}
-            step={0.01}
-          />
-          <NumberField
             label="Tokens par appel"
             value={draft.maxTokensPerCall}
             onChange={(v) => patch({ maxTokensPerCall: Math.round(v) })}
@@ -476,14 +458,6 @@ function ConfigEditor({
             onChange={(v) => patch({ timeoutMs: Math.round(v * 1000) })}
             min={5}
             step={5}
-          />
-          <NumberField
-            label="Nombre de rounds"
-            value={draft.maxRounds}
-            onChange={(v) => patch({ maxRounds: Math.round(v) })}
-            min={0}
-            max={3}
-            step={1}
           />
           <NumberField
             label="Seuil d'accord (%)"
@@ -503,27 +477,6 @@ function ConfigEditor({
             Recherche web des analystes
           </label>
         </div>
-      </section>
-
-      <section className="mt-5 rounded-lg border border-border bg-bg p-3 text-sm">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-          <p className="text-ink">
-            Budget maximal : <span className="font-medium">{formatBudget(draft.maxBudgetCents)}</span>
-          </p>
-          <p className="text-ink">
-            Coût estimé par analyse : <span className="font-medium">{formatEstimatedCost(config)}</span>
-            {isCostKnown(config) && (
-              <span className="ml-1 text-xs text-ink-secondary">
-                (niveau {costLevel(estimateRunCostCents(config))})
-              </span>
-            )}
-          </p>
-        </div>
-        <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-          Estimation pour une analyse complète (consolidation, révisions et synthèse comprises). Le coût réel
-          dépend de la longueur de la question et des réponses.
-          {demo && <span className="font-medium text-warning"> Mode démo actif : aucun coût réel.</span>}
-        </p>
       </section>
 
       <div className="mt-5 flex items-center justify-end gap-2">
@@ -655,8 +608,7 @@ function ConfigCard({
             </div>
           )}
           <p className="mt-1 text-xs text-ink-secondary">
-            {config.config.analysts.length + 1} analystes · budget max {formatBudget(config.config.maxBudgetCents)} · ≈{" "}
-            {formatEstimatedCost(config.config)} par analyse
+            {config.config.analysts.length + 1} analystes
           </p>
         </div>
         {!active && (
@@ -705,10 +657,8 @@ function ConfigCard({
             <span className="font-medium text-ink-faint">Synthèse</span> — {modelLabel(config.config.synthesis)}
           </li>
           <li className="text-xs text-ink-secondary">
-            <span className="font-medium text-ink-faint">Paramètres</span> — budget {formatBudget(config.config.maxBudgetCents)} ·{" "}
-            {config.config.maxTokensPerCall} tokens/appel · {config.config.timeoutMs / 1000} s ·{" "}
-            {config.config.maxRounds} round{config.config.maxRounds > 1 ? "s" : ""} · accord ≥{" "}
-            {config.config.minAgreementScore}%
+            <span className="font-medium text-ink-faint">Paramètres</span> — {config.config.maxTokensPerCall} tokens/appel ·{" "}
+            {config.config.timeoutMs / 1000} s · accord ≥ {config.config.minAgreementScore}%
             {config.config.search ? " · recherche active" : ""}
           </li>
         </ul>

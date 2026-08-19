@@ -4,6 +4,7 @@ import type {
   OrchestrationConfig,
   RunResult,
   TimelineEntry,
+  WorkflowProgress,
 } from "@/contracts/workflow";
 import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage } from "@/contracts/gateway";
 import type { AnalystDossier, ResearchSource } from "@/contracts/research";
@@ -23,11 +24,7 @@ import {
 
 export interface OrchestratorDeps {
   generate(req: GenerationRequest): Promise<GenerationResult>;
-}
-
-interface BudgetState {
-  cents: number;
-  over: boolean;
+  onProgress?(progress: WorkflowProgress): void;
 }
 
 const WORDS_PER_TOKEN = 0.75;
@@ -54,7 +51,7 @@ export function runWorkflow(
 
 class Orchestrator {
   private timeline: TimelineEntry[] = [];
-  private budget: BudgetState = { cents: 0, over: false };
+  private totalCostCents = 0;
   private totalTokens = 0;
   private totalLatency = 0;
 
@@ -68,9 +65,12 @@ class Orchestrator {
     this.timeline.push({ step, label, status, durationMs, detail });
   }
 
+  private emit(progress: WorkflowProgress) {
+    this.deps.onProgress?.(progress);
+  }
+
   private account(spec: ModelSpec, usage: Usage, latencyMs: number) {
-    this.budget.cents += tokensToUsd(spec, usage) * 100;
-    if (this.budget.cents > this.config.maxBudgetCents) this.budget.over = true;
+    this.totalCostCents += tokensToUsd(spec, usage) * 100;
     this.totalTokens += usage.promptTokens + usage.completionTokens;
     this.totalLatency += latencyMs;
   }
@@ -209,8 +209,10 @@ class Orchestrator {
   async run(): Promise<RunResult> {
     const started = Date.now();
     const estimatedCostCents = this.estimate();
+    const analystCount = this.config.analysts.length;
 
     // A — Analyse A (orchestrateur)
+    this.emit({ step: "A", status: "running", label: "Compréhension de la question" });
     const tA = Date.now();
     const aRes = await this.safeCall(
       this.config.orchestrator,
@@ -224,15 +226,45 @@ class Orchestrator {
       usage: aRes.usage,
     };
     this.tick("A", "Analyse A (orchestrateur)", aRes.error ? "error" : "done", Date.now() - tA);
+    this.emit({
+      step: "A",
+      status: aRes.error ? "error" : "done",
+      label: "Compréhension de la question",
+      durationMs: Date.now() - tA,
+      detail: aRes.error,
+    });
 
     // B — Recherches + analyses initiales des analystes (parallèle)
+    this.emit({ step: "B", status: "running", label: "Analyses indépendantes", completed: 0, total: analystCount });
     const tB = Date.now();
-    const initialAnalyses = await Promise.all(
-      this.config.analysts.map((spec, i) => this.runAnalyst(i, spec))
-    );
+    let bDone = 0;
+    const bTasks = this.config.analysts.map((spec, i) => {
+      const task = this.runAnalyst(i, spec);
+      task.then(() => {
+        bDone += 1;
+        this.emit({
+          step: "B",
+          status: "running",
+          label: "Analyses indépendantes",
+          completed: bDone,
+          total: analystCount,
+        });
+      });
+      return task;
+    });
+    const initialAnalyses = await Promise.all(bTasks);
+    this.emit({
+      step: "B",
+      status: "done",
+      label: "Analyses indépendantes",
+      completed: analystCount,
+      total: analystCount,
+      durationMs: Date.now() - tB,
+    });
     this.tick("B", "Recherches et analyses initiales", "done", Date.now() - tB, `${initialAnalyses.length} analystes`);
 
     // S — Consolidation A → AB → ABC → ... avec provenance des sources
+    this.emit({ step: "S", status: "running", label: "Mise en commun" });
     const tS = Date.now();
     let consolidatedText = analysisA.text;
     let consolidatedLabel = "A";
@@ -272,33 +304,64 @@ class Orchestrator {
       dossier: this.mergedDossier(initialAnalyses),
     };
     this.tick("S", "Consolidation orchestrateur", consolidationError ? "error" : "done", Date.now() - tS, `analyse ${consolidatedLabel}`);
+    this.emit({
+      step: "S",
+      status: consolidationError ? "error" : "done",
+      label: "Mise en commun",
+      durationMs: Date.now() - tS,
+      detail: consolidationError,
+    });
 
     // R — Révisions des analystes (parallèle) : consolidation + contradictions détectées
+    this.emit({ step: "R", status: "running", label: "Révisions", completed: 0, total: analystCount });
     const tR = Date.now();
     const contradictions = this.extractSection(consolidatedText, "contradictions") ?? undefined;
-    const revisedAnalyses = await Promise.all(
-      this.config.analysts.map(async (spec, i) => {
-        const label = analystLabel(i);
-        const res = await this.safeCall(
-          spec,
-          this.messages(
-            revisionPrompt(this.question, label, initialAnalyses[i].text, consolidated.label, consolidated.text, contradictions)
-          )
-        );
-        return {
-          label: `${label}${consolidated.label}`,
-          role: "analyst" as const,
-          analystIndex: i,
-          model: spec,
-          text: res.text,
-          usage: res.usage,
-          dossier: initialAnalyses[i].dossier,
-        };
-      })
-    );
+    let rDone = 0;
+    const rTasks = this.config.analysts.map((spec, i) => {
+      const label = analystLabel(i);
+      const task = this.safeCall(
+        spec,
+        this.messages(
+          revisionPrompt(this.question, label, initialAnalyses[i].text, consolidated.label, consolidated.text, contradictions)
+        )
+      );
+      task.then(() => {
+        rDone += 1;
+        this.emit({
+          step: "R",
+          status: "running",
+          label: "Révisions",
+          completed: rDone,
+          total: analystCount,
+        });
+      });
+      return task;
+    });
+    const rResults = await Promise.all(rTasks);
+    const revisedAnalyses = rResults.map((res, i) => {
+      const label = analystLabel(i);
+      return {
+        label: `${label}${consolidated.label}`,
+        role: "analyst" as const,
+        analystIndex: i,
+        model: this.config.analysts[i],
+        text: res.text,
+        usage: res.usage,
+        dossier: initialAnalyses[i].dossier,
+      };
+    });
+    this.emit({
+      step: "R",
+      status: "done",
+      label: "Révisions",
+      completed: analystCount,
+      total: analystCount,
+      durationMs: Date.now() - tR,
+    });
     this.tick("R", "Révisions des analystes", "done", Date.now() - tR, `${revisedAnalyses.length} révisions`);
 
     // F — Analyse finale par l'orchestrateur
+    this.emit({ step: "F", status: "running", label: "Synthèse finale" });
     const tF = Date.now();
     const contributions = [
       { label: consolidated.label, text: consolidated.text },
@@ -318,8 +381,13 @@ class Orchestrator {
       report: parseConsensusReport(finalText) ?? undefined,
     };
     this.tick("F", "Synthèse finale", fRes.error ? "error" : "done", Date.now() - tF);
-
-    const stoppedEarly = this.budget.over;
+    this.emit({
+      step: "F",
+      status: fRes.error ? "error" : "done",
+      label: "Synthèse finale",
+      durationMs: Date.now() - tF,
+      detail: fRes.error,
+    });
 
     return {
       analysisA,
@@ -329,10 +397,9 @@ class Orchestrator {
       finalSynthesis,
       timeline: this.timeline,
       estimatedCostCents: Math.round(estimatedCostCents * 100) / 100,
-      actualCostCents: Math.round(this.budget.cents * 100) / 100,
+      actualCostCents: Math.round(this.totalCostCents * 100) / 100,
       totalLatencyMs: Date.now() - started,
       totalTokens: this.totalTokens,
-      stoppedEarly,
     };
   }
 

@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import type { OrchestrationConfig } from "@/contracts/workflow";
 import type { listProvidersStatus } from "@/app/actions";
-import { formatBudget, formatEstimatedCost } from "@/lib/format";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
 import { ChevronDownIcon } from "@/app/components/ui/icons";
@@ -68,14 +67,6 @@ export function SettingsContent({
               <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
                 {activeConfig.analysts.length + 1} analystes (orchestrateur inclus), puis une comparaison et une synthèse finale.
               </p>
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-secondary">
-                <span>
-                  Budget maximal : <span className="font-medium text-ink">{formatBudget(activeConfig.maxBudgetCents)}</span>
-                </span>
-                <span>
-                  Coût estimé : <span className="font-medium text-ink">≈ {formatEstimatedCost(activeConfig)} par analyse</span>
-                </span>
-              </div>
             </div>
             <Link href="/configurations" className="shrink-0">
               <Button size="sm" variant="secondary">
@@ -183,12 +174,6 @@ export function SettingsContent({
               value={`${activeConfig.analysts.length} analyste${activeConfig.analysts.length > 1 ? "s" : ""} indépendant${activeConfig.analysts.length > 1 ? "s" : ""} · configurable librement`}
               badge="Information"
               tone="neutral"
-            />
-            <StatusRow
-              label="Budget par défaut"
-              value="Contrôlé par configuration · aucun dépassement possible"
-              badge="Sécurisé"
-              tone="success"
             />
           </div>
         )}

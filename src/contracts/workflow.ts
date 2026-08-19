@@ -17,8 +17,6 @@ export interface OrchestrationConfig {
   analysts: ModelSpec[];
   consensus: ModelSpec;
   synthesis: ModelSpec;
-  maxRounds: number;
-  maxBudgetCents: number;
   maxTokensPerCall: number;
   timeoutMs: number;
   minAgreementScore: number;
@@ -53,6 +51,18 @@ export interface FinalSynthesisOutput extends AnalysisOutput {
 
 export type WorkflowStep = "A" | "B" | "S" | "R" | "F";
 
+export type WorkflowProgressStatus = "pending" | "running" | "done" | "error";
+
+export interface WorkflowProgress {
+  step: WorkflowStep;
+  status: WorkflowProgressStatus;
+  completed?: number;
+  total?: number;
+  label: string;
+  detail?: string;
+  durationMs?: number;
+}
+
 export interface TimelineEntry {
   step: WorkflowStep;
   label: string;
@@ -72,13 +82,12 @@ export interface RunResult {
   actualCostCents: number;
   totalLatencyMs: number;
   totalTokens: number;
-  stoppedEarly: boolean;
 }
 
 export interface RunStatus {
   runId: string;
   conversationId: string;
-  status: "running" | "completed" | "failed" | "budget_exceeded";
+  status: "running" | "completed" | "failed";
   question: string;
   result?: RunResult;
   error?: string;

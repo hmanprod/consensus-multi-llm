@@ -25,9 +25,9 @@ async function main() {
   console.log("4. rename:", updated.name);
 
   const updatedCfg = await store.updateConfig(created.id, {
-    config: { ...created.config, maxRounds: 2, orchestrator: { provider: "openrouter", model: "openai/gpt-5.6" } },
+    config: { ...created.config, orchestrator: { provider: "openrouter", model: "openai/gpt-5.6" } },
   });
-  console.log("5. update config:", updatedCfg.config.maxRounds, JSON.stringify(updatedCfg.config.orchestrator));
+  console.log("5. update config:", JSON.stringify(updatedCfg.config.orchestrator));
 
   const duplicate = await store.saveConfig(`${updatedCfg.name} (copie)`, "custom", updatedCfg.config);
   console.log("6. duplicata:", duplicate.name);

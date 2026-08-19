@@ -49,8 +49,6 @@ const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
     ],
     consensus: { provider: "openai", model: "chatgpt-5.6" },
     synthesis: { provider: "openai", model: "chatgpt-5.6" },
-    maxRounds: 0,
-    maxBudgetCents: 60,
     maxTokensPerCall: 2048,
     timeoutMs: 120_000,
     minAgreementScore: 70,
@@ -67,8 +65,6 @@ const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
     ],
     consensus: { provider: "openai", model: "chatgpt-5.6" },
     synthesis: { provider: "openai", model: "chatgpt-5.6" },
-    maxRounds: 1,
-    maxBudgetCents: 150,
     maxTokensPerCall: 4000,
     timeoutMs: 180_000,
     minAgreementScore: 75,
@@ -119,6 +115,5 @@ export function describeProfile(profile: Profile): string {
     line("Orchestrateur (Analyse A + consolidation + finale)", cfg.orchestrator),
     `Analystes (${cfg.analysts.length})`,
     ...cfg.analysts.map((a, i) => `  ${String.fromCharCode(66 + i)} — ${a.provider}/${a.model}`),
-    `Budget max : ${cfg.maxBudgetCents} cents`,
   ].join("\n");
 }

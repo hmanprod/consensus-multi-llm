@@ -132,6 +132,5 @@ export function describeConfig(config: OrchestrationConfig): string {
   return [
     `Profile: ${config.profile}`,
     `Analysts: ${config.analysts.length}`,
-    `Max budget: ${config.maxBudgetCents} cents`,
   ].join("\n");
 }

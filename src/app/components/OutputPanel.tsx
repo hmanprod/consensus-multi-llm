@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoredRun } from "@/lib/store";
-import type { ConsensusReport, TimelineEntry } from "@/contracts/workflow";
+import type { ConsensusReport } from "@/contracts/workflow";
 import type { AnalystDossier } from "@/contracts/research";
 import { parseConsensusReport } from "@/lib/consensus-report";
 import { getRunData } from "@/app/actions";
@@ -13,42 +13,27 @@ import {
   AlertIcon,
   CheckIcon,
   ChevronDownIcon,
-  ClockIcon,
   CloseIcon,
   ColumnsIcon,
   CopyIcon,
   DownloadIcon,
   GaugeIcon,
-  LayersIcon,
   LinkIcon,
 } from "./ui/icons";
 
-export type OutputPanelTab = "summary" | "comparison" | "workflow" | "metrics" | "sources";
+export type OutputPanelTab = "summary" | "comparison" | "metrics" | "sources";
 
 const TABS: { id: OutputPanelTab; label: string; icon: typeof ColumnsIcon }[] = [
   { id: "summary", label: "Synthèse", icon: ColumnsIcon },
   { id: "comparison", label: "Comparaison", icon: ColumnsIcon },
   { id: "sources", label: "Sources", icon: LinkIcon },
-  { id: "workflow", label: "Workflow", icon: LayersIcon },
   { id: "metrics", label: "Métriques", icon: GaugeIcon },
 ];
-
-function formatCost(cents: number): string {
-  return `${cents.toFixed(2)} €`;
-}
 
 function excerpt(text: string, len = 140): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > len ? `${clean.slice(0, len)}…` : clean;
 }
-
-const MODEL_BY_STEP: Record<TimelineEntry["step"], (r: StoredRun) => string | null> = {
-  A: (r) => (r.result ? `${r.result.analysisA.model.provider}/${r.result.analysisA.model.model}` : null),
-  B: (r) => (r.result && r.result.initialAnalyses[0] ? `${r.result.initialAnalyses[0].model.provider}/${r.result.initialAnalyses[0].model.model}` : null),
-  S: (r) => (r.result ? `${r.result.consolidated.model.provider}/${r.result.consolidated.model.model}` : null),
-  R: (r) => (r.result && r.result.revisedAnalyses[0] ? `${r.result.revisedAnalyses[0].model.provider}/${r.result.revisedAnalyses[0].model.model}` : null),
-  F: (r) => (r.result ? `${r.result.finalSynthesis.model.provider}/${r.result.finalSynthesis.model.model}` : null),
-};
 
 export function OutputPanel({
   runId,
@@ -194,10 +179,6 @@ export function OutputPanel({
           <SourcesView run={run} />
         )}
 
-        {!loading && run?.result && activeTab === "workflow" && (
-          <WorkflowView run={run} />
-        )}
-
         {!loading && run?.result && activeTab === "metrics" && (
           <MetricsView run={run} />
         )}
@@ -229,14 +210,10 @@ function SummaryView({ run }: { run: StoredRun }) {
   );
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2">
-        <StatCard label="Coût réel" value={formatCost(r.actualCostCents)} />
+      <div className="grid grid-cols-2 gap-2">
         <StatCard label="Durée" value={`${(r.totalLatencyMs / 1000).toFixed(1)}`} unit="s" />
         <StatCard label="Tokens" value={String(r.totalTokens)} />
       </div>
-      {r.stoppedEarly && (
-        <Badge tone="warning">Budget atteint — analyse arrêtée en avance</Badge>
-      )}
 
       {report ? (
         <div className="space-y-4">
@@ -551,46 +528,6 @@ function Accordion({ title, children }: { title: React.ReactNode; children: Reac
   );
 }
 
-function WorkflowView({ run }: { run: StoredRun }) {
-  const r = run.result!;
-  return (
-    <div className="space-y-4">
-      <SectionTitle>Déroulement A → B → S → R → F</SectionTitle>
-      <ol className="space-y-1.5">
-        {r.timeline.map((t, i) => {
-          const model = MODEL_BY_STEP[t.step](run);
-          const detailText = t.detail;
-          return (
-            <Accordion
-              key={i}
-              title={
-                <span className="flex flex-1 items-center gap-3">
-                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface font-mono text-xs font-medium text-ink-secondary">
-                    {t.step}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{t.label}</span>
-                  <Badge tone={t.status === "done" ? "success" : t.status === "error" ? "danger" : "neutral"}>
-                    {t.status === "done" ? "fait" : t.status === "error" ? "erreur" : "ignoré"}
-                  </Badge>
-                </span>
-              }
-            >
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-secondary">
-                <span className="inline-flex items-center gap-1">
-                  <ClockIcon size={13} />
-                  {t.status === "skipped" ? "Ignoré" : `${t.durationMs} ms`}
-                </span>
-                {model && <span className="font-mono">{model}</span>}
-                {detailText && <span>{detailText}</span>}
-              </div>
-            </Accordion>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 function MetricsView({ run }: { run: StoredRun }) {
   const r = run.result!;
   const models = new Set<string>();
@@ -600,8 +537,6 @@ function MetricsView({ run }: { run: StoredRun }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Coût estimé" value={formatCost(r.estimatedCostCents)} />
-        <StatCard label="Coût réel" value={formatCost(r.actualCostCents)} />
         <StatCard label="Durée totale" value={`${(r.totalLatencyMs / 1000).toFixed(1)}`} unit="s" />
         <StatCard label="Tokens" value={String(r.totalTokens)} />
         <StatCard label="Modèles utilisés" value={String(models.size)} />
@@ -612,12 +547,6 @@ function MetricsView({ run }: { run: StoredRun }) {
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
           <span className="text-ink-secondary">Révisions des analystes</span>
           <span className="font-medium text-ink">{r.revisedAnalyses.length}</span>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
-          <span className="text-ink-secondary">Arrêt anticipé (budget)</span>
-          <Badge tone={r.stoppedEarly ? "warning" : "success"}>
-            {r.stoppedEarly ? "Oui" : "Non"}
-          </Badge>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
           <span className="text-ink-secondary">Statut</span>

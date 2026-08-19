@@ -230,8 +230,6 @@ export const prismaStore: Store = {
         name,
         profile,
         configJson: config as unknown as object,
-        maxRounds: config.maxRounds,
-        maxBudgetCents: config.maxBudgetCents,
         maxTokens: config.maxTokensPerCall,
         timeoutMs: config.timeoutMs,
         minAgreementScore: config.minAgreementScore,
@@ -263,8 +261,6 @@ export const prismaStore: Store = {
     if (patch.config) {
       data.configJson = patch.config;
       data.profile = patch.config.profile;
-      data.maxRounds = patch.config.maxRounds;
-      data.maxBudgetCents = patch.config.maxBudgetCents;
       data.maxTokens = patch.config.maxTokensPerCall;
       data.timeoutMs = patch.config.timeoutMs;
       data.minAgreementScore = patch.config.minAgreementScore;
@@ -315,8 +311,6 @@ type ConfigRow = {
   name: string;
   profile: string;
   configJson: unknown;
-  maxRounds: number;
-  maxBudgetCents: number;
   maxTokens: number;
   timeoutMs: number;
   minAgreementScore: number;
@@ -346,8 +340,6 @@ function decodeConfig(c: ConfigRow) {
     analysts: [{ provider: "mock", model: "analyst" }],
     consensus: { provider: "mock", model: "consensus" },
     synthesis: { provider: "mock", model: "synthesis" },
-    maxRounds: c.maxRounds,
-    maxBudgetCents: c.maxBudgetCents,
     maxTokensPerCall: c.maxTokens,
     timeoutMs: c.timeoutMs,
     minAgreementScore: c.minAgreementScore,

@@ -3,21 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { StoredConfig, StoredConversation, StoredMessage } from "@/lib/store";
-import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, WorkflowProgress } from "@/contracts/workflow";
 import { resolveActiveRef } from "@/config/profiles";
 import {
-  askQuestion,
   deleteConversation,
+  executeRun,
   getConversationData,
+  getRunProgress,
   listAllConversations,
   listProvidersStatus,
   renameConversation,
   setActiveConfiguration,
+  startQuestion,
 } from "@/app/actions";
 import { Sidebar } from "./Sidebar";
 import { EmptyState } from "./EmptyState";
 import { Composer } from "./Composer";
-import { Progress } from "./Progress";
+import { ConversationWorkflow } from "./ConversationWorkflow";
 import { ConsensusSummaryCard } from "./ConsensusSummaryCard";
 import { OutputPanel, type OutputPanelTab } from "./OutputPanel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -55,7 +57,10 @@ export function AppShell({
   const [lastOutputTab, setLastOutputTab] = useState<OutputPanelTab>("summary");
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [runKey, setRunKey] = useState(0);
+  const [activeProgress, setActiveProgress] = useState<WorkflowProgress[]>([]);
+  const [activeStartedAt, setActiveStartedAt] = useState(0);
   const abortRef = useRef(false);
+  const currentRunIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -153,10 +158,27 @@ export function AppShell({
     setError(null);
     abortRef.current = false;
     setRunKey((k) => k + 1);
+    setActiveStartedAt(Date.now());
+    setActiveProgress([]);
+    currentRunIdRef.current = null;
+    let pollId: ReturnType<typeof setInterval> | null = null;
     try {
-      const res = await askQuestion({ question, configRef: activeRef, conversationId: selectedId ?? undefined });
+      const res = await startQuestion({ question, configRef: activeRef, conversationId: selectedId ?? undefined });
       if (abortRef.current) return;
       setSelectedId(res.conversationId);
+      currentRunIdRef.current = res.runId;
+      const poll = async () => {
+        try {
+          const progress = await getRunProgress(res.runId);
+          if (currentRunIdRef.current === res.runId && progress.length) setActiveProgress(progress);
+        } catch {
+          // progression indisponible : on garde l'état actuel
+        }
+      };
+      poll();
+      pollId = setInterval(poll, 700);
+      await executeRun({ runId: res.runId, question, configRef: activeRef });
+      if (abortRef.current) return;
       await refreshConversation(res.conversationId);
       setConversations(await listAllConversations());
       setQuestion("");
@@ -164,13 +186,18 @@ export function AppShell({
       if (abortRef.current) return;
       setError(err instanceof Error ? err.message : "Erreur inattendue");
     } finally {
-      if (!abortRef.current) setBusy(false);
+      if (pollId) clearInterval(pollId);
+      if (!abortRef.current) {
+        setBusy(false);
+        setActiveProgress([]);
+      }
     }
   }
 
   function stopAnalysis() {
     abortRef.current = true;
     setBusy(false);
+    setActiveProgress([]);
     setQuestion("");
     showToast("Arrêt demandé — le traitement peut continuer côté serveur.", "info");
   }
@@ -193,6 +220,17 @@ export function AppShell({
   async function copyMessage(content: string) {
     await navigator.clipboard.writeText(content);
     showToast("Réponse copiée.", "success");
+  }
+
+  function downloadMessage(content: string, runId: string) {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `consensus-${runId}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Réponse téléchargée.", "success");
   }
 
   function lastUserQuestion(): string {
@@ -300,8 +338,10 @@ export function AppShell({
                   <ConsensusSummaryCard
                     key={m.id}
                     content={m.content}
+                    runId={m.runId}
                     onCopy={() => copyMessage(m.content)}
-                    onOpenOutput={() => openOutput(m.runId!)}
+                    onDownload={() => downloadMessage(m.content, m.runId!)}
+                    onOpenDetails={() => openOutput(m.runId!, "comparison")}
                     onRegenerate={regenerate}
                     onDeepen={deepen}
                   />
@@ -312,7 +352,14 @@ export function AppShell({
                   </article>
                 )
               )}
-              {busy && <Progress key={runKey} active onStop={stopAnalysis} />}
+              {busy && (
+                <ConversationWorkflow
+                  key={runKey}
+                  progress={activeProgress}
+                  startedAt={activeStartedAt}
+                  onStop={stopAnalysis}
+                />
+              )}
               {showJump && (
                 <button
                   onClick={scrollToBottom}
