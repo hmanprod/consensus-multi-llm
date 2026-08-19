@@ -78,6 +78,10 @@ body {
   outline-offset: 2px;
 }
 
+textarea:focus-visible {
+  outline: none;
+}
+
 @keyframes slide-in-right {
   from {
     transform: translateX(100%);
