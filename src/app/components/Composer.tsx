@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { ActiveConfig } from "@/contracts/workflow";
 import type { StoredConfig } from "@/lib/store";
-import { PROFILE_META, configRefKey, getProfile, parseConfigRefKey } from "@/config/profiles";
+import { configRefKey, parseConfigRefKey } from "@/config/profiles";
 import { SendIcon, SettingsIcon, StopIcon } from "./ui/icons";
 
 export function Composer({
@@ -28,7 +28,11 @@ export function Composer({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const canSubmit = question.trim().length > 0 && !busy;
-  const selectValue = configRefKey(activeRef);
+  const selectValue = savedConfigs.some((c) => configRefKey(activeRef) === `saved:${c.id}`)
+    ? configRefKey(activeRef)
+    : savedConfigs[0]
+      ? `saved:${savedConfigs[0].id}`
+      : "saved:";
 
   useEffect(() => {
     const el = ref.current;
@@ -87,11 +91,11 @@ export function Composer({
             aria-label="Configuration d'analyse"
             className="max-w-[15rem] cursor-pointer rounded-md border border-border bg-surface px-2 py-0.5 text-sm font-medium text-ink outline-none transition-colors focus:border-accent"
           >
-            {(["economical", "best"] as const).map((p) => (
-              <option key={p} value={`profile:${p}`}>
-                {PROFILE_META[p].name} · {getProfile(p).analysts.length} analystes
+            {savedConfigs.length === 0 && (
+              <option value="saved:" disabled>
+                Aucune configuration
               </option>
-            ))}
+            )}
             {savedConfigs.map((c) => (
               <option key={c.id} value={`saved:${c.id}`}>
                 {c.name} · {c.config.analysts.length} analystes

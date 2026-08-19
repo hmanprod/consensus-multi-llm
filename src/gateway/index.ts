@@ -20,6 +20,7 @@ const DEFAULT_API_KEYS: Record<string, string | undefined> = {
   xai: process.env.XAI_API_KEY,
   meta: process.env.MODEL_API_KEY,
   openrouter: process.env.OPENROUTER_API_KEY,
+  zenmux: process.env.ZENMUX_API_KEY,
 };
 
 export const KNOWN_PROVIDERS = [
@@ -33,6 +34,7 @@ export const KNOWN_PROVIDERS = [
   "xai",
   "meta",
   "openrouter",
+  "zenmux",
   "mock",
 ] as const;
 export type KnownProvider = (typeof KNOWN_PROVIDERS)[number];

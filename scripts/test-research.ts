@@ -100,10 +100,10 @@ async function main() {
     }
   }
 
-  for (const p of ["openai", "gemini", "kimi", "xai", "meta", "openrouter"] as const) {
+  for (const p of ["openai", "gemini", "kimi", "xai", "meta", "openrouter", "zenmux"] as const) {
     check(Boolean(PROVIDER_LABELS[p]), `provider ${p} : label présent`);
   }
-  for (const p of ["openai", "kimi", "xai", "meta"] as const) {
+  for (const p of ["openai", "kimi", "xai", "meta", "zenmux"] as const) {
     check(Boolean(OPENAI_COMPATIBLE_BASE_URLS[p]), `provider ${p} : base URL définie`);
   }
 

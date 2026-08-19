@@ -13,9 +13,50 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
   glm: [{ label: "GLM 5.3", slug: "glm-5.3" }],
   xai: [{ label: "Grok 4.6", slug: "grok-4.6" }],
   meta: [{ label: "Muse Spark", slug: "muse-spark-1.2" }],
-  openrouter: [{ label: "Auto (OpenRouter)", slug: "auto" }],
+  openrouter: [
+    { label: "Auto (OpenRouter)", slug: "auto" },
+    { label: "ChatGPT 5.6 Sol · via OpenRouter", slug: "openai/gpt-5.6-sol" },
+    { label: "ChatGPT 5.6 Luna · via OpenRouter", slug: "openai/gpt-5.6-luna" },
+    { label: "Gemini 3.7 Flash · via OpenRouter", slug: "google/gemini-3.7-flash" },
+    { label: "Grok 4.5 · via OpenRouter", slug: "x-ai/grok-4.5" },
+    { label: "Muse Spark Latest · via OpenRouter", slug: "meta-llama/muse-spark-latest" },
+    { label: "DeepSeek V4 Flash · via OpenRouter", slug: "deepseek/deepseek-v4-flash" },
+    { label: "DeepSeek V4 Pro · via OpenRouter", slug: "deepseek/deepseek-v4-pro" },
+    { label: "Kimi K3 · via OpenRouter", slug: "moonshotai/kimi-k3" },
+    { label: "Qwen 3.8 Max · via OpenRouter", slug: "qwen/qwen-3.8-max" },
+    { label: "Claude Opus 5 · via OpenRouter", slug: "anthropic/claude-opus-5" },
+    { label: "Claude Sonnet 5 · via OpenRouter", slug: "anthropic/claude-sonnet-5" },
+  ],
+  zenmux: [
+    { label: "Auto (ZenMux)", slug: "auto" },
+    { label: "ChatGPT 5.6 Sol · via ZenMux", slug: "openai/gpt-5.6-sol" },
+    { label: "ChatGPT 5.6 Luna · via ZenMux", slug: "openai/gpt-5.6-luna" },
+    { label: "Gemini 3.7 Flash · via ZenMux", slug: "google/gemini-3.7-flash" },
+    { label: "Grok 4.5 · via ZenMux", slug: "x-ai/grok-4.5" },
+    { label: "Muse Spark Latest · via ZenMux", slug: "meta-llama/muse-spark-latest" },
+    { label: "DeepSeek V4 Flash · via ZenMux", slug: "deepseek/deepseek-v4-flash" },
+    { label: "DeepSeek V4 Pro · via ZenMux", slug: "deepseek/deepseek-v4-pro" },
+    { label: "Kimi K3 · via ZenMux", slug: "moonshotai/kimi-k3" },
+    { label: "Qwen 3.8 Max · via ZenMux", slug: "qwen/qwen-3.8-max" },
+    { label: "Claude Opus 5 · via ZenMux", slug: "anthropic/claude-opus-5" },
+    { label: "Claude Sonnet 5 · via ZenMux", slug: "anthropic/claude-sonnet-5" },
+  ],
   mock: [{ label: "Mock (démo)", slug: "mock" }],
 };
+
+export const CUSTOM_MODEL_VALUE = "__custom__";
+
+export function isKnownModel(spec: { provider: string; model: string }): boolean {
+  return (MODELS_BY_PROVIDER[spec.provider] ?? []).some((m) => m.slug === spec.model);
+}
+
+export function modelLabel(spec: { provider: string; model: string }): string {
+  const entry = MODELS_BY_PROVIDER[spec.provider]?.find((m) => m.slug === spec.model);
+  if (entry) return entry.label;
+  if (spec.provider === "openrouter") return `${spec.model} · via OpenRouter`;
+  if (spec.provider === "zenmux") return `${spec.model} · via ZenMux`;
+  return spec.model;
+}
 
 export interface ProviderPlatform {
   url: string;
@@ -63,6 +104,10 @@ export const PROVIDER_PLATFORMS: Record<string, ProviderPlatform> = {
     url: "https://openrouter.ai/keys",
     hint: "Créez ou connectez-vous à votre compte OpenRouter, puis générez une clé API depuis le tableau de bord.",
   },
+  zenmux: {
+    url: "https://zenmux.ai/",
+    hint: "Créez ou connectez-vous à votre compte ZenMux, puis générez une clé API depuis le tableau de bord.",
+  },
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {
@@ -76,6 +121,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   xai: "Grok (xAI)",
   meta: "Meta Model API",
   openrouter: "OpenRouter",
+  zenmux: "ZenMux",
   mock: "Mock (démo)",
 };
 
@@ -87,4 +133,5 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   glm: "https://open.bigmodel.cn/api/paas/v4",
   xai: "https://api.x.ai/v1",
   meta: "https://api.meta.ai/v1",
+  zenmux: "https://zenmux.ai/api/v1",
 };

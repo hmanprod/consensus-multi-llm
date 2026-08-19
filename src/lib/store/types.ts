@@ -32,6 +32,12 @@ export interface StoredConfig {
   profile: OrchestrationConfig["profile"];
   config: OrchestrationConfig;
   createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConfigPatch {
+  name?: string;
+  config?: OrchestrationConfig;
 }
 
 export interface Store {
@@ -58,6 +64,8 @@ export interface Store {
   saveConfig(name: string, profile: OrchestrationConfig["profile"], config: OrchestrationConfig): Promise<StoredConfig>;
   listConfigs(): Promise<StoredConfig[]>;
   getConfig(id: string): Promise<StoredConfig | null>;
+  updateConfig(id: string, patch: ConfigPatch): Promise<StoredConfig>;
+  deleteConfig(id: string): Promise<void>;
   setActiveConfig(ref: ActiveConfig): Promise<void>;
   getActiveConfig(): Promise<ActiveConfig>;
 }

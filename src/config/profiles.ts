@@ -2,7 +2,7 @@ import type { ActiveConfig, OrchestrationConfig, Profile, ProfileRef } from "@/c
 import type { StoredConfig } from "@/lib/store/types";
 
 export const MOCK_MODE = process.env.MOCK_MODE === "true" ||
-  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.XAI_API_KEY && !process.env.MODEL_API_KEY && !process.env.KIMI_API_KEY);
+  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.ZENMUX_API_KEY && !process.env.XAI_API_KEY && !process.env.MODEL_API_KEY && !process.env.KIMI_API_KEY);
 
 export const PROFILE_META: Record<ProfileRef, { name: string; tagline: string; speed: string }> = {
   economical: {
@@ -18,15 +18,14 @@ export const PROFILE_META: Record<ProfileRef, { name: string; tagline: string; s
 };
 
 export function resolveActiveRef(ref: ActiveConfig, saved: StoredConfig[]): OrchestrationConfig {
-  if (ref.type === "profile") return getProfile(ref.profile);
-  const found = saved.find((c) => c.id === ref.id);
-  return found ? { ...found.config, profile: "custom" } : getProfile("economical");
-}
-
-export function activeRefLabel(ref: ActiveConfig, saved: StoredConfig[]): string {
-  if (ref.type === "profile") return PROFILE_META[ref.profile].name;
-  const found = saved.find((c) => c.id === ref.id);
-  return found ? found.name : "Configuration";
+  if (ref.type === "saved") {
+    const found = saved.find((c) => c.id === ref.id);
+    if (found) return { ...found.config, profile: "custom" };
+    if (saved.length > 0) return { ...saved[0].config, profile: "custom" };
+    return getProfile("economical");
+  }
+  if (saved.length > 0) return { ...saved[0].config, profile: "custom" };
+  return getProfile(ref.profile);
 }
 
 export function configRefKey(ref: ActiveConfig): string {

@@ -1,5 +1,5 @@
 import type { OrchestrationConfig } from "@/contracts/workflow";
-import { estimateCost } from "@/gateway/cost";
+import { estimateCost, hasPricing } from "@/gateway/cost";
 
 export function formatEur(n: number): string {
   return new Intl.NumberFormat("fr-FR", {
@@ -25,7 +25,12 @@ export function estimateRunCostCents(config: OrchestrationConfig): number {
   return Math.round(total * 100) / 100;
 }
 
+export function isCostKnown(config: OrchestrationConfig): boolean {
+  return [config.orchestrator, config.consensus, config.synthesis, ...config.analysts].every(hasPricing);
+}
+
 export function formatEstimatedCost(config: OrchestrationConfig): string {
+  if (!isCostKnown(config)) return "coût inconnu";
   return formatBudget(estimateRunCostCents(config));
 }
 

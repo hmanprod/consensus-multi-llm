@@ -1,26 +1,82 @@
 "use client";
 
 import { useState } from "react";
-import type { ActiveConfig, OrchestrationConfig, ProfileRef } from "@/contracts/workflow";
-import { getProfile, PROFILE_META } from "@/config/profiles";
-import { MODELS_BY_PROVIDER, PROVIDER_LABELS } from "@/config/models";
-import { listSavedConfigs, saveCustomConfig, setActiveConfiguration } from "@/app/actions";
-import { costLevel, estimateRunCostCents, formatBudget, formatEstimatedCost } from "@/lib/format";
+import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
+import { getProfile } from "@/config/profiles";
+import { CUSTOM_MODEL_VALUE, MODELS_BY_PROVIDER, PROVIDER_LABELS, modelLabel } from "@/config/models";
+import {
+  deleteCustomConfig,
+  duplicateCustomConfig,
+  listSavedConfigs,
+  saveCustomConfig,
+  setActiveConfiguration,
+  updateCustomConfig,
+} from "@/app/actions";
+import { costLevel, estimateRunCostCents, formatBudget, formatEstimatedCost, isCostKnown } from "@/lib/format";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
-import { ChevronDownIcon, TrashIcon } from "@/app/components/ui/icons";
+import { ChevronDownIcon, CloseIcon, CopyIcon, PencilIcon, PlusIcon, TrashIcon } from "@/app/components/ui/icons";
 
 type RoleSpec = { provider: string; model: string };
 type SavedConfig = Awaited<ReturnType<typeof listSavedConfigs>>[number];
 
-const PROFILE_IDS: ProfileRef[] = ["economical", "best"];
+const MAX_ANALYSTS = 3;
+const BASE_CFG = getProfile("economical");
+
+interface Draft {
+  name: string;
+  orchestrator: RoleSpec;
+  analysts: RoleSpec[];
+  consensus: RoleSpec;
+  synthesis: RoleSpec;
+  maxBudgetCents: number;
+  maxTokensPerCall: number;
+  timeoutMs: number;
+  maxRounds: number;
+  minAgreementScore: number;
+  search: boolean;
+}
+
+type EditorMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; id: string };
 
 function analystName(index: number): string {
   return `Analyste ${String.fromCharCode(66 + index)}`;
 }
 
-function specLabel(spec: RoleSpec): string {
-  return `${PROVIDER_LABELS[spec.provider] ?? spec.provider} · ${MODELS_BY_PROVIDER[spec.provider]?.find((m) => m.slug === spec.model)?.label ?? spec.model}`;
+function draftFromConfig(config: OrchestrationConfig, name = ""): Draft {
+  return {
+    name,
+    orchestrator: { ...config.orchestrator },
+    analysts: config.analysts.map((a) => ({ ...a })),
+    consensus: { ...config.consensus },
+    synthesis: { ...config.synthesis },
+    maxBudgetCents: config.maxBudgetCents,
+    maxTokensPerCall: config.maxTokensPerCall,
+    timeoutMs: config.timeoutMs,
+    maxRounds: config.maxRounds,
+    minAgreementScore: config.minAgreementScore,
+    search: config.search ?? false,
+  };
+}
+
+function draftToConfig(d: Draft): OrchestrationConfig {
+  return {
+    profile: "custom",
+    orchestrator: d.orchestrator,
+    analysts: d.analysts,
+    consensus: d.consensus,
+    synthesis: d.synthesis,
+    maxRounds: d.maxRounds,
+    maxBudgetCents: d.maxBudgetCents,
+    maxTokensPerCall: d.maxTokensPerCall,
+    timeoutMs: d.timeoutMs,
+    minAgreementScore: d.minAgreementScore,
+    search: d.search,
+  };
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : "Erreur";
 }
 
 export function ConfigurationsClient({
@@ -32,335 +88,534 @@ export function ConfigurationsClient({
   demo: boolean;
   initialActive: ActiveConfig;
 }) {
-  const defaultCfg = getProfile("economical");
   const [saved, setSaved] = useState(initial);
   const [active, setActive] = useState<ActiveConfig>(initialActive);
-  const [name, setName] = useState("");
-  const [orchestrator, setOrchestrator] = useState<RoleSpec>(defaultCfg.orchestrator);
-  const [analysts, setAnalysts] = useState<RoleSpec[]>(defaultCfg.analysts);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [editor, setEditor] = useState<EditorMode>({ kind: "closed" });
   const [done, setDone] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const draftConfig: OrchestrationConfig = { ...defaultCfg, profile: "custom", orchestrator, analysts };
+  const activeId = active.type === "saved" ? active.id : null;
 
-  function loadIntoForm(config: OrchestrationConfig) {
-    setOrchestrator(config.orchestrator);
-    setAnalysts(config.analysts);
+  async function refresh() {
+    setSaved(await listSavedConfigs());
   }
 
-  async function persistActive(ref: ActiveConfig): Promise<boolean> {
+  async function persistActive(id: string): Promise<boolean> {
+    const ref: ActiveConfig = { type: "saved", id };
     setActive(ref);
     try {
       await setActiveConfiguration({ ref });
       return true;
     } catch (err) {
-      setDone({ ok: false, text: err instanceof Error ? err.message : "Erreur" });
+      setDone({ ok: false, text: errorText(err) });
       return false;
     }
   }
 
-  async function activateProfile(id: ProfileRef) {
-    const cfg = getProfile(id);
-    loadIntoForm(cfg);
-    setShowAdvanced(false);
-    setDone(null);
-    if (await persistActive({ type: "profile", profile: id })) {
-      setDone({ ok: true, text: `Profil ${PROFILE_META[id].name} activé.` });
-    }
-  }
-
-  async function activateSaved(id: string) {
-    const found = saved.find((c) => c.id === id);
-    if (found) loadIntoForm(found.config);
-    setDone(null);
-    if (await persistActive({ type: "saved", id })) {
-      setDone({ ok: true, text: "Configuration activée." });
-    }
-  }
-
-  function setOrchestratorPatch(patch: Partial<RoleSpec>) {
-    const next = { ...orchestrator, ...patch };
-    if (patch.provider) next.model = MODELS_BY_PROVIDER[patch.provider][0].slug;
-    setOrchestrator(next);
-  }
-
-  function setAnalyst(index: number, patch: Partial<RoleSpec>) {
-    setAnalysts((list) => {
-      const next = { ...list[index], ...patch };
-      if (patch.provider) next.model = MODELS_BY_PROVIDER[patch.provider][0].slug;
-      return list.map((a, i) => (i === index ? next : a));
-    });
-  }
-
-  function addAnalyst() {
-    setAnalysts((list) => [...list, { provider: "mock", model: "mock" }]);
-  }
-
-  function removeAnalyst(index: number) {
-    setAnalysts((list) => list.filter((_, i) => i !== index));
-  }
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || busy) return;
+  async function activate(id: string) {
     setBusy(true);
     setDone(null);
     try {
-      const res = await saveCustomConfig({ name, config: draftConfig });
-      setSaved(await listSavedConfigs());
-      const ref: ActiveConfig = { type: "saved", id: res.id };
-      setActive(ref);
-      await setActiveConfiguration({ ref });
-      setDone({ ok: true, text: "Configuration enregistrée et activée." });
-    } catch (err) {
-      setDone({ ok: false, text: err instanceof Error ? err.message : "Erreur" });
+      if (await persistActive(id)) setDone({ ok: true, text: "Configuration activée." });
     } finally {
       setBusy(false);
     }
   }
 
+  async function handleCreate(draft: Draft): Promise<boolean> {
+    setBusy(true);
+    setDone(null);
+    try {
+      const res = await saveCustomConfig({ name: draft.name, config: draftToConfig(draft) });
+      await refresh();
+      await persistActive(res.id);
+      setEditor({ kind: "closed" });
+      setDone({ ok: true, text: "Configuration créée et activée." });
+      return true;
+    } catch (err) {
+      setDone({ ok: false, text: errorText(err) });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdate(id: string, draft: Draft): Promise<boolean> {
+    setBusy(true);
+    setDone(null);
+    try {
+      await updateCustomConfig({ id, name: draft.name, config: draftToConfig(draft) });
+      await refresh();
+      setEditor({ kind: "closed" });
+      setDone({ ok: true, text: "Configuration modifiée." });
+      return true;
+    } catch (err) {
+      setDone({ ok: false, text: errorText(err) });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDuplicate(id: string) {
+    setBusy(true);
+    setDone(null);
+    try {
+      await duplicateCustomConfig({ id });
+      await refresh();
+      setDone({ ok: true, text: "Configuration dupliquée." });
+    } catch (err) {
+      setDone({ ok: false, text: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRename(id: string, name: string) {
+    setBusy(true);
+    setDone(null);
+    try {
+      await updateCustomConfig({ id, name });
+      await refresh();
+      setDone({ ok: true, text: "Configuration renommée." });
+    } catch (err) {
+      setDone({ ok: false, text: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setBusy(true);
+    setDone(null);
+    try {
+      await deleteCustomConfig({ id });
+      await refresh();
+      setDone({ ok: true, text: "Configuration supprimée." });
+    } catch (err) {
+      setDone({ ok: false, text: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openCreate() {
+    setEditor({ kind: "create" });
+    setDone(null);
+  }
+
+  function openEdit(config: SavedConfig) {
+    setEditor({ kind: "edit", id: config.id });
+    setDone(null);
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Configurations</h1>
-      <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-        Choisissez comment Consensus doit analyser vos questions : une réponse rapide ou une analyse
-        approfondie. Vous pouvez aussi créer votre propre configuration.
-      </p>
-
-      <div className="mt-8">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Profils recommandés
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {PROFILE_IDS.map((id) => (
-            <ProfileFiche
-              key={id}
-              id={id}
-              config={getProfile(id)}
-              active={active.type === "profile" && active.profile === id}
-              demo={demo}
-              onUse={() => activateProfile(id)}
-            />
-          ))}
-        </div>
-      </div>
-
-      <form onSubmit={save} className="mt-10">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          aria-expanded={showAdvanced}
-          className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left"
-        >
-          <div>
-            <p className="text-sm font-semibold text-ink">Créer une configuration personnalisée</p>
-            <p className="mt-0.5 text-xs text-ink-secondary">
-              {orchestrator && `Orchestrateur : ${specLabel(orchestrator)} · ${analysts.length} analystes`}
-            </p>
-          </div>
-          <ChevronDownIcon size={16} className={`text-ink-faint transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
-        </button>
-
-        {showAdvanced && (
-          <div className="mt-3 space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2 text-xs">
-              <span className="text-accent-strong">Éditeur personnalisé ouvert</span>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(false)}
-                className="font-medium text-accent hover:underline"
-              >
-                Revenir aux profils
-              </button>
-            </div>
-
-            <section>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Informations</p>
-              <label htmlFor="cfg-name" className="mb-1.5 block text-sm font-medium text-ink">
-                Nom de la configuration
-              </label>
-              <input
-                id="cfg-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex. : Configuration équilibrée"
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
-              />
-            </section>
-
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Modèles utilisés</p>
-                <button
-                  type="button"
-                  onClick={addAnalyst}
-                  className="rounded-md border border-border px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface"
-                >
-                  + Ajouter un analyste
-                </button>
-              </div>
-              <div className="space-y-3">
-                <div className="rounded-lg border border-border p-3">
-                  <p className="mb-2 text-xs font-medium text-ink">Orchestrateur (analyse A + synthèse)</p>
-                  <RolePicker label="Orchestrateur" spec={orchestrator} onChange={(patch) => setOrchestratorPatch(patch)} />
-                </div>
-                {analysts.map((a, i) => (
-                  <div key={i} className="rounded-lg border border-border p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-medium text-ink">{analystName(i)}</p>
-                      {analysts.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => removeAnalyst(i)}
-                          aria-label={`Retirer ${analystName(i)}`}
-                          title={`Retirer ${analystName(i)}`}
-                          className="rounded p-1 text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
-                        >
-                          <TrashIcon size={14} />
-                        </button>
-                      )}
-                    </div>
-                    <RolePicker label={analystName(i)} spec={a} onChange={(patch) => setAnalyst(i, patch)} compact />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-border p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Budget et limites</p>
-              <p className="text-sm text-ink">
-                Budget maximal : <span className="font-medium">{formatBudget(draftConfig.maxBudgetCents)}</span>
-                <span className="ml-1 text-xs text-ink-secondary">— aucune analyse ne dépassera cette limite.</span>
-              </p>
-              <p className="mt-2 text-sm text-ink">
-                Coût estimé par analyse :{" "}
-                <span className="font-medium">{formatEstimatedCost(draftConfig)}</span>
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-                Estimation pour une analyse complète (consolidation, révisions et synthèse comprises). Le coût
-                réel dépend de la longueur de la question et des réponses.{" "}
-                <span className="font-medium text-ink">Niveau de coût : {costLevel(estimateRunCostCents(draftConfig))}.</span>
-              </p>
-            </section>
-
-            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-ink-secondary">
-                {analysts.length} analystes · {orchestrator ? specLabel(orchestrator) : ""}
-              </p>
-              <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
-                {busy ? "Enregistrement…" : "Enregistrer la configuration"}
-              </Button>
-            </div>
-            {done && (
-              <p className={`text-sm ${done.ok ? "text-success" : "text-danger"}`}>{done.text}</p>
-            )}
-          </div>
-        )}
-      </form>
-
-      {saved.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-lg font-semibold text-ink">Configurations enregistrées</h2>
-          <p className="mt-1 text-xs text-ink-secondary">
-            Vos configurations personnalisées. Cliquez sur « Utiliser » pour lancer vos analyses avec celle-ci.
-          </p>
-          <ul className="mt-3 space-y-3">
-            {saved.map((c) => (
-              <SavedFiche
-                key={c.id}
-                config={c}
-                active={active.type === "saved" && active.id === c.id}
-                onUse={() => activateSaved(c.id)}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProfileFiche({
-  id,
-  config,
-  active,
-  demo,
-  onUse,
-}: {
-  id: ProfileRef;
-  config: OrchestrationConfig;
-  active: boolean;
-  demo: boolean;
-  onUse: () => void;
-}) {
-  const [modelsOpen, setModelsOpen] = useState(false);
-  const meta = PROFILE_META[id];
-  const cost = estimateRunCostCents(config);
-
-  return (
-    <div
-      className={`rounded-xl border p-4 transition-colors ${
-        active ? "border-accent bg-accent-soft/40 ring-1 ring-accent" : "border-border bg-surface"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-ink">{meta.name}</p>
-            <Badge tone="neutral">{meta.speed}</Badge>
-            {id === "best" && <Badge tone="success">Recommandé</Badge>}
-            {demo && <Badge tone="warning">Démo</Badge>}
-            {active && <Badge tone="accent">Actif</Badge>}
-          </div>
-          <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{meta.tagline}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Configurations</h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+            Créez vos propres configurations, comparez des variantes et activez celle à utiliser pour vos
+            analyses.
+          </p>
         </div>
-        {!active && (
-          <Button size="sm" variant="primary" onClick={onUse}>
-            Utiliser
+        {editor.kind === "closed" && (
+          <Button variant="primary" onClick={openCreate} className="shrink-0">
+            <PlusIcon size={14} />
+            Nouvelle configuration
           </Button>
         )}
       </div>
 
-      <p className="mt-3 text-xs text-ink-secondary">
-        {config.analysts.length} analystes · budget max {formatBudget(config.maxBudgetCents)} · ≈{" "}
-        {formatEstimatedCost(config)} par analyse
-      </p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" onClick={() => setModelsOpen((v) => !v)} aria-expanded={modelsOpen}>
-          {modelsOpen ? "Masquer les modèles" : "Voir les modèles"}
-          <ChevronDownIcon size={12} className={`transition-transform ${modelsOpen ? "rotate-180" : ""}`} />
-        </Button>
-        <span className="text-[11px] text-ink-faint">Coût estimé : {costLevel(cost)}</span>
-      </div>
-
-      {modelsOpen && (
-        <ul className="mt-3 space-y-1 border-t border-border pt-3">
-          <li className="text-xs text-ink-secondary">
-            <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.orchestrator)}
-          </li>
-          {config.analysts.map((a, i) => (
-            <li key={i} className="text-xs text-ink-secondary">
-              <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
-            </li>
-          ))}
-        </ul>
+      {done && (
+        <p className={`mt-4 text-sm ${done.ok ? "text-success" : "text-danger"}`}>{done.text}</p>
       )}
+
+      {editor.kind !== "closed" && (
+        <div className="mt-6">
+          {editor.kind === "edit" ? (
+            <ConfigEditor
+              key={editor.id}
+              title="Modifier la configuration"
+              initialDraft={draftFromConfigFromSaved(saved, editor.id)}
+              demo={demo}
+              busy={busy}
+              submitLabel="Enregistrer les modifications"
+              onCancel={() => setEditor({ kind: "closed" })}
+              onSubmit={(draft) => handleUpdate(editor.id, draft)}
+            />
+          ) : (
+            <ConfigEditor
+              title="Nouvelle configuration"
+              initialDraft={draftFromConfig(BASE_CFG)}
+              demo={demo}
+              busy={busy}
+              submitLabel="Créer la configuration"
+              onCancel={() => setEditor({ kind: "closed" })}
+              onSubmit={handleCreate}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-ink">Vos configurations</h2>
+        <p className="mt-1 text-xs text-ink-secondary">
+          {saved.length === 0
+            ? "Aucune configuration pour le moment."
+            : "La configuration active est utilisée pour vos analyses."}
+        </p>
+        {saved.length > 0 && (
+          <ul className="mt-3 space-y-3">
+            {saved.map((c) => (
+              <ConfigCard
+                key={c.id}
+                config={c}
+                active={activeId === c.id}
+                demo={demo}
+                busy={busy}
+                onActivate={() => activate(c.id)}
+                onEdit={() => openEdit(c)}
+                onDuplicate={() => handleDuplicate(c.id)}
+                onRename={(name) => handleRename(c.id, name)}
+                onDelete={() => handleDelete(c.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
 
-function SavedFiche({
+function draftFromConfigFromSaved(saved: SavedConfig[], id: string): Draft {
+  const found = saved.find((c) => c.id === id);
+  if (found) return draftFromConfig(found.config, found.name);
+  return draftFromConfig(BASE_CFG);
+}
+
+function ConfigEditor({
+  title,
+  initialDraft,
+  demo,
+  busy,
+  submitLabel,
+  onCancel,
+  onSubmit,
+}: {
+  title: string;
+  initialDraft: Draft;
+  demo: boolean;
+  busy: boolean;
+  submitLabel: string;
+  onCancel: () => void;
+  onSubmit: (draft: Draft) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState<Draft>(initialDraft);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const config = draftToConfig(draft);
+  const specsValid = [config.orchestrator, config.consensus, config.synthesis, ...config.analysts].every(
+    (s) => s.model.trim().length > 0
+  );
+  const canSubmit = draft.name.trim().length > 0 && specsValid;
+
+  function patch(p: Partial<Draft>) {
+    setDraft((d) => ({ ...d, ...p }));
+  }
+
+  function setOrchestrator(spec: RoleSpec) {
+    patch({ orchestrator: spec });
+  }
+
+  function setAnalyst(index: number, spec: RoleSpec) {
+    setDraft((d) => ({ ...d, analysts: d.analysts.map((a, i) => (i === index ? spec : a)) }));
+  }
+
+  function addAnalyst() {
+    setDraft((d) =>
+      d.analysts.length < MAX_ANALYSTS ? { ...d, analysts: [...d.analysts, { provider: "mock", model: "mock" }] } : d
+    );
+  }
+
+  function removeAnalyst(index: number) {
+    setDraft((d) => ({ ...d, analysts: d.analysts.filter((_, i) => i !== index) }));
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (canSubmit) void onSubmit(draft);
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="rounded-xl border border-border bg-surface p-5 sm:p-6"
+      aria-label={title}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Fermer l'éditeur"
+          className="rounded p-1 text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink"
+        >
+          <CloseIcon size={16} />
+        </button>
+      </div>
+
+      <section className="mt-5">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Informations</p>
+        <label htmlFor="cfg-name" className="mb-1.5 block text-sm font-medium text-ink">
+          Nom de la configuration
+        </label>
+        <input
+          id="cfg-name"
+          value={draft.name}
+          onChange={(e) => patch({ name: e.target.value })}
+          placeholder="Ex. : Recherche approfondie"
+          className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        />
+      </section>
+
+      <section className="mt-6">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Modèles utilisés</p>
+          <button
+            type="button"
+            onClick={addAnalyst}
+            disabled={draft.analysts.length >= MAX_ANALYSTS}
+            className="rounded-md border border-border px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-bg disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            + Ajouter un analyste
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border bg-bg p-3">
+            <p className="mb-2 text-xs font-medium text-ink">Orchestrateur (analyse A + synthèse)</p>
+            <RolePicker label="Orchestrateur" spec={draft.orchestrator} onChange={setOrchestrator} />
+          </div>
+          {draft.analysts.map((a, i) => (
+            <div key={i} className="rounded-lg border border-border bg-bg p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium text-ink">{analystName(i)}</p>
+                {draft.analysts.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeAnalyst(i)}
+                    aria-label={`Retirer ${analystName(i)}`}
+                    title={`Retirer ${analystName(i)}`}
+                    className="rounded p-1 text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+                  >
+                    <TrashIcon size={14} />
+                  </button>
+                )}
+              </div>
+              <RolePicker label={analystName(i)} spec={a} onChange={(spec) => setAnalyst(i, spec)} compact />
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          aria-expanded={showAdvanced}
+          className="mt-4 flex w-full items-center justify-between rounded-lg border border-border bg-bg px-3 py-2.5 text-left"
+        >
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Consolidation, synthèse et paramètres avancés
+          </span>
+          <ChevronDownIcon size={14} className={`text-ink-faint transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-3 space-y-3">
+            <div className="rounded-lg border border-border bg-bg p-3">
+              <p className="mb-2 text-xs font-medium text-ink">Consolidation des analyses</p>
+              <RolePicker
+                label="Consensus"
+                spec={draft.consensus}
+                onChange={(spec) => patch({ consensus: spec })}
+                compact
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-bg p-3">
+              <p className="mb-2 text-xs font-medium text-ink">Synthèse finale</p>
+              <RolePicker
+                label="Synthèse"
+                spec={draft.synthesis}
+                onChange={(spec) => patch({ synthesis: spec })}
+                compact
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-border bg-bg p-3">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Paramètres</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <NumberField
+            label="Budget maximal (€)"
+            value={draft.maxBudgetCents / 100}
+            onChange={(v) => patch({ maxBudgetCents: Math.round(v * 100) })}
+            min={0.01}
+            step={0.01}
+          />
+          <NumberField
+            label="Tokens par appel"
+            value={draft.maxTokensPerCall}
+            onChange={(v) => patch({ maxTokensPerCall: Math.round(v) })}
+            min={256}
+            step={256}
+          />
+          <NumberField
+            label="Délai d'expiration (s)"
+            value={draft.timeoutMs / 1000}
+            onChange={(v) => patch({ timeoutMs: Math.round(v * 1000) })}
+            min={5}
+            step={5}
+          />
+          <NumberField
+            label="Nombre de rounds"
+            value={draft.maxRounds}
+            onChange={(v) => patch({ maxRounds: Math.round(v) })}
+            min={0}
+            max={3}
+            step={1}
+          />
+          <NumberField
+            label="Seuil d'accord (%)"
+            value={draft.minAgreementScore}
+            onChange={(v) => patch({ minAgreementScore: Math.round(v) })}
+            min={0}
+            max={100}
+            step={5}
+          />
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={draft.search}
+              onChange={(e) => patch({ search: e.target.checked })}
+              className="h-4 w-4 rounded border-border accent-accent"
+            />
+            Recherche web des analystes
+          </label>
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-lg border border-border bg-bg p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <p className="text-ink">
+            Budget maximal : <span className="font-medium">{formatBudget(draft.maxBudgetCents)}</span>
+          </p>
+          <p className="text-ink">
+            Coût estimé par analyse : <span className="font-medium">{formatEstimatedCost(config)}</span>
+            {isCostKnown(config) && (
+              <span className="ml-1 text-xs text-ink-secondary">
+                (niveau {costLevel(estimateRunCostCents(config))})
+              </span>
+            )}
+          </p>
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
+          Estimation pour une analyse complète (consolidation, révisions et synthèse comprises). Le coût réel
+          dépend de la longueur de la question et des réponses.
+          {demo && <span className="font-medium text-warning"> Mode démo actif : aucun coût réel.</span>}
+        </p>
+      </section>
+
+      <div className="mt-5 flex items-center justify-end gap-2">
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>
+          Annuler
+        </Button>
+        <Button type="submit" variant="primary" disabled={busy || !canSubmit}>
+          {busy ? "Enregistrement…" : submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max?: number;
+  step: number;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-ink">{label}</span>
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (!Number.isNaN(v)) onChange(v);
+        }}
+        className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+      />
+    </label>
+  );
+}
+
+function ConfigCard({
   config,
   active,
-  onUse,
+  demo,
+  busy,
+  onActivate,
+  onEdit,
+  onDuplicate,
+  onRename,
+  onDelete,
 }: {
   config: SavedConfig;
   active: boolean;
-  onUse: () => void;
+  demo: boolean;
+  busy: boolean;
+  onActivate: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
 }) {
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(config.name);
+
+  async function submitRename() {
+    const name = nameDraft.trim();
+    if (!name || name === config.name) {
+      setRenaming(false);
+      return;
+    }
+    onRename(name);
+    setRenaming(false);
+  }
+
+  function startDelete() {
+    if (confirmDelete) {
+      onDelete();
+      setConfirmDelete(false);
+    } else {
+      setConfirmDelete(true);
+    }
+  }
 
   return (
     <li
@@ -368,46 +623,94 @@ function SavedFiche({
         active ? "border-accent bg-accent-soft/40 ring-1 ring-accent" : "border-border bg-bg"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">{config.name}</p>
-          <p className="mt-0.5 text-xs text-ink-secondary">
-            {config.config.analysts.length} analystes · budget max{" "}
-            {formatBudget(config.config.maxBudgetCents)} · ≈ {formatEstimatedCost(config.config)} par analyse
+          {renaming ? (
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => {
+                setNameDraft(config.name);
+                setRenaming(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submitRename();
+                }
+                if (e.key === "Escape") {
+                  setNameDraft(config.name);
+                  setRenaming(false);
+                }
+              }}
+              autoFocus
+              aria-label="Renommer la configuration"
+              className="w-full rounded-md border border-border bg-bg px-2 py-1 text-sm font-semibold text-ink outline-none focus:border-accent"
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-ink">{config.name}</p>
+              {active && <Badge tone="accent">Actif</Badge>}
+              {demo && <Badge tone="warning">Démo</Badge>}
+            </div>
+          )}
+          <p className="mt-1 text-xs text-ink-secondary">
+            {config.config.analysts.length} analystes · budget max {formatBudget(config.config.maxBudgetCents)} · ≈{" "}
+            {formatEstimatedCost(config.config)} par analyse
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge tone="neutral">Personnalisé</Badge>
-          {active ? (
-            <Badge tone="accent">Actif</Badge>
-          ) : (
-            <Button size="sm" variant="primary" onClick={onUse}>
-              Utiliser
-            </Button>
-          )}
-        </div>
+        {!active && (
+          <Button size="sm" variant="primary" onClick={onActivate} disabled={busy}>
+            Utiliser
+          </Button>
+        )}
       </div>
-      <div className="mt-2">
-        <button
-          type="button"
-          onClick={() => setModelsOpen((v) => !v)}
-          aria-expanded={modelsOpen}
-          className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-        >
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => setModelsOpen((v) => !v)} aria-expanded={modelsOpen}>
           {modelsOpen ? "Masquer les modèles" : "Voir les modèles"}
           <ChevronDownIcon size={12} className={`transition-transform ${modelsOpen ? "rotate-180" : ""}`} />
-        </button>
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onEdit} disabled={busy}>
+          <PencilIcon size={12} />
+          Modifier
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDuplicate} disabled={busy}>
+          <CopyIcon size={12} />
+          Dupliquer
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setRenaming(true)} disabled={busy}>
+          Renommer
+        </Button>
+        <Button size="sm" variant="ghost" onClick={startDelete} disabled={busy} className={confirmDelete ? "text-danger" : ""}>
+          <TrashIcon size={12} />
+          {confirmDelete ? "Confirmer la suppression" : "Supprimer"}
+        </Button>
       </div>
+
       {modelsOpen && (
-        <ul className="mt-2 space-y-1 border-t border-border pt-3">
+        <ul className="mt-3 space-y-1 border-t border-border pt-3">
           <li className="text-xs text-ink-secondary">
-            <span className="font-medium text-ink-faint">Orchestrateur</span> — {specLabel(config.config.orchestrator)}
+            <span className="font-medium text-ink-faint">Orchestrateur</span> — {modelLabel(config.config.orchestrator)}
           </li>
           {config.config.analysts.map((a, i) => (
             <li key={i} className="text-xs text-ink-secondary">
-              <span className="font-medium text-ink-faint">{analystName(i)}</span> — {specLabel(a)}
+              <span className="font-medium text-ink-faint">{analystName(i)}</span> — {modelLabel(a)}
             </li>
           ))}
+          <li className="text-xs text-ink-secondary">
+            <span className="font-medium text-ink-faint">Consensus</span> — {modelLabel(config.config.consensus)}
+          </li>
+          <li className="text-xs text-ink-secondary">
+            <span className="font-medium text-ink-faint">Synthèse</span> — {modelLabel(config.config.synthesis)}
+          </li>
+          <li className="text-xs text-ink-secondary">
+            <span className="font-medium text-ink-faint">Paramètres</span> — budget {formatBudget(config.config.maxBudgetCents)} ·{" "}
+            {config.config.maxTokensPerCall} tokens/appel · {config.config.timeoutMs / 1000} s ·{" "}
+            {config.config.maxRounds} round{config.config.maxRounds > 1 ? "s" : ""} · accord ≥{" "}
+            {config.config.minAgreementScore}%
+            {config.config.search ? " · recherche active" : ""}
+          </li>
         </ul>
       )}
     </li>
@@ -422,16 +725,23 @@ function RolePicker({
 }: {
   label: string;
   spec: RoleSpec;
-  onChange: (patch: Partial<RoleSpec>) => void;
+  onChange: (spec: RoleSpec) => void;
   compact?: boolean;
 }) {
   const providers = Object.keys(MODELS_BY_PROVIDER);
+  const models = MODELS_BY_PROVIDER[spec.provider] ?? [];
+  const isCustom = !models.some((m) => m.slug === spec.model);
+
   return (
     <div className={compact ? "flex flex-1 flex-col gap-2 sm:flex-row sm:items-center" : "flex flex-wrap items-center gap-2"}>
       <span className={`w-32 shrink-0 text-sm ${compact ? "text-ink-faint" : "font-medium text-ink"}`}>{label}</span>
       <select
         value={spec.provider}
-        onChange={(e) => onChange({ provider: e.target.value })}
+        onChange={(e) => {
+          const provider = e.target.value;
+          const first = MODELS_BY_PROVIDER[provider]?.[0]?.slug ?? "";
+          onChange({ provider, model: first });
+        }}
         aria-label={`Provider du rôle ${label}`}
         className="rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
       >
@@ -442,17 +752,41 @@ function RolePicker({
         ))}
       </select>
       <select
-        value={spec.model}
-        onChange={(e) => onChange({ model: e.target.value })}
+        value={isCustom ? CUSTOM_MODEL_VALUE : spec.model}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === CUSTOM_MODEL_VALUE && !isCustom) {
+            onChange({ ...spec, model: spec.model });
+          } else if (v !== CUSTOM_MODEL_VALUE) {
+            onChange({ ...spec, model: v });
+          }
+        }}
         aria-label={`Modèle du rôle ${label}`}
         className="rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
       >
-        {MODELS_BY_PROVIDER[spec.provider].map((m) => (
+        {models.map((m) => (
           <option key={m.slug} value={m.slug}>
             {m.label}
           </option>
         ))}
+        <option value={CUSTOM_MODEL_VALUE}>Identifiant personnalisé…</option>
       </select>
+      {isCustom && (
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <input
+            value={spec.model}
+            onChange={(e) => onChange({ ...spec, model: e.target.value })}
+            placeholder={spec.provider === "openrouter" || spec.provider === "zenmux" ? "openai/gpt-5.6" : "identifiant"}
+            aria-label={`Identifiant du modèle ${label}`}
+            className="w-full min-w-[10rem] rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          />
+          {(spec.provider === "openrouter" || spec.provider === "zenmux") && (
+            <span className="text-[11px] text-ink-faint">
+              Identifiant {PROVIDER_LABELS[spec.provider]}, ex. : openai/gpt-5.6
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

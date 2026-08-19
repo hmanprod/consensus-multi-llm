@@ -126,12 +126,14 @@ export const memoryStore: Store = {
   },
 
   async saveConfig(name, profile, config: OrchestrationConfig) {
+    const now = Date.now();
     const saved: StoredConfig = {
       id: id("cfg"),
       name,
       profile,
       config,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
     configs.set(saved.id, saved);
     return saved;
@@ -143,6 +145,25 @@ export const memoryStore: Store = {
 
   async getConfig(id) {
     return configs.get(id) ?? null;
+  },
+
+  async updateConfig(id, patch) {
+    const existing = configs.get(id);
+    if (!existing) throw new Error("configuration_not_found");
+    const next: StoredConfig = {
+      ...existing,
+      name: patch.name ?? existing.name,
+      config: patch.config ?? existing.config,
+      profile: patch.config ? patch.config.profile : existing.profile,
+      updatedAt: Date.now(),
+    };
+    configs.set(id, next);
+    return next;
+  },
+
+  async deleteConfig(id) {
+    if (!configs.has(id)) throw new Error("configuration_not_found");
+    configs.delete(id);
   },
 
   async setActiveConfig(ref) {

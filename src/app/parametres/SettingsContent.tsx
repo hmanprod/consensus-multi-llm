@@ -179,8 +179,8 @@ export function SettingsContent({
               tone="neutral"
             />
             <StatusRow
-              label="Analystes par profil"
-              value="Économique : 3 · Approfondi : 5"
+              label="Analystes par configuration"
+              value={`${activeConfig.analysts.length} analyste${activeConfig.analysts.length > 1 ? "s" : ""} indépendant${activeConfig.analysts.length > 1 ? "s" : ""} · configurable librement`}
               badge="Information"
               tone="neutral"
             />

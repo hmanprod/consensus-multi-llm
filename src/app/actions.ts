@@ -1,22 +1,35 @@
 "use server";
 
 import { z } from "zod";
-import type { ActiveConfig, OrchestrationConfig, Profile } from "@/contracts/workflow";
-import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
-import { getProfile, describeProfile, resolveAvailableSpecs } from "@/config/profiles";
+import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
+import { getProfile, resolveAvailableSpecs } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
 import { getStore } from "@/lib/store";
+import { ensureUserSetup } from "@/lib/setup";
 import { encryptSecret } from "@/lib/crypto";
 import { getAuthUserId, userStorage } from "@/lib/user-context";
 import type { KnownProvider } from "@/gateway";
 
-const PROFILE_SCHEMA = z.enum(["economical", "best", "custom"]);
 const PROVIDER_SCHEMA = z.enum(KNOWN_PROVIDERS as unknown as [string, ...string[]]);
-const ACTIVE_CONFIG_SCHEMA = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("profile"), profile: z.enum(["economical", "best"]) }),
-  z.object({ type: z.literal("saved"), id: z.string().min(1) }),
-]);
+const MODEL_SPEC_SCHEMA = z.object({
+  provider: PROVIDER_SCHEMA,
+  model: z.string().trim().min(1).max(200),
+});
+const CONFIG_SCHEMA = z.object({
+  profile: z.enum(["economical", "best", "custom"]).optional(),
+  orchestrator: MODEL_SPEC_SCHEMA,
+  analysts: z.array(MODEL_SPEC_SCHEMA).min(1).max(3),
+  consensus: MODEL_SPEC_SCHEMA,
+  synthesis: MODEL_SPEC_SCHEMA,
+  maxRounds: z.number().int().min(0).max(3),
+  maxBudgetCents: z.number().int().min(1).max(100_000),
+  maxTokensPerCall: z.number().int().min(256).max(65_536),
+  timeoutMs: z.number().int().min(5_000).max(600_000),
+  minAgreementScore: z.number().int().min(0).max(100),
+  search: z.boolean().optional(),
+});
+const ACTIVE_CONFIG_SCHEMA = z.object({ type: z.literal("saved"), id: z.string().min(1) });
 
 export type AskResult = {
   runId: string;
@@ -51,16 +64,25 @@ async function resolveConfig(base: OrchestrationConfig): Promise<OrchestrationCo
   return resolveAvailableSpecs(base, (p) => Boolean(keys[p]));
 }
 
-async function savedConfigBase(id: string): Promise<OrchestrationConfig> {
+async function savedConfigBase(id: string): Promise<OrchestrationConfig | null> {
   const store = await getStore();
   const saved = await store.getConfig(id);
-  if (!saved) return getProfile("economical");
+  if (!saved) return null;
   return { ...saved.config, profile: "custom" };
 }
 
 async function resolveConfigRef(ref: ActiveConfig): Promise<OrchestrationConfig> {
-  const base = ref.type === "profile" ? getProfile(ref.profile) : await savedConfigBase(ref.id);
-  return resolveConfig(base);
+  if (ref.type === "saved") {
+    const base = await savedConfigBase(ref.id);
+    if (base) return resolveConfig(base);
+  }
+  const store = await getStore();
+  const active = await store.getActiveConfig();
+  if (active.type === "saved") {
+    const fallback = await savedConfigBase(active.id);
+    if (fallback) return resolveConfig(fallback);
+  }
+  return resolveConfig(getProfile("economical"));
 }
 
 async function getActiveConfigRef(): Promise<ActiveConfig> {
@@ -73,25 +95,24 @@ export async function getActiveConfiguration(): Promise<{
   config: OrchestrationConfig;
 }> {
   return asUser(async () => {
+    await ensureUserSetup();
     const store = await getStore();
-    let ref = await getActiveConfigRef();
-    if (ref.type === "saved" && !(await store.getConfig(ref.id))) {
-      ref = { ...DEFAULT_ACTIVE_CONFIG };
-      await store.setActiveConfig(ref);
-    }
-    const base = ref.type === "profile" ? getProfile(ref.profile) : await savedConfigBase(ref.id);
-    return { ref, config: { ...base, profile: ref.type === "profile" ? ref.profile : "custom" } };
+    const ref = await store.getActiveConfig();
+    if (ref.type !== "saved") throw new Error("active_config_invalid");
+    const saved = await store.getConfig(ref.id);
+    const base: OrchestrationConfig = saved
+      ? { ...saved.config, profile: "custom" }
+      : getProfile("economical");
+    return { ref, config: base };
   });
 }
 
 export async function setActiveConfiguration(input: { ref: ActiveConfig }) {
   return asUser(async () => {
+    await ensureUserSetup();
     const ref = ACTIVE_CONFIG_SCHEMA.parse(input.ref);
-    if (ref.type === "saved") {
-      const store = await getStore();
-      if (!(await store.getConfig(ref.id))) throw new Error("configuration_not_found");
-    }
     const store = await getStore();
+    if (!(await store.getConfig(ref.id))) throw new Error("configuration_not_found");
     await store.setActiveConfig(ref);
     return { ok: true, ref };
   });
@@ -107,6 +128,7 @@ export async function askQuestion(input: {
   if (question.length > 2000) throw new Error("question_too_long");
 
   return userStorage.run(await getAuthUserId(), async () => {
+    await ensureUserSetup();
     const refResult = input.configRef ? ACTIVE_CONFIG_SCHEMA.safeParse(input.configRef) : { success: true, data: null };
     const config = refResult.success && refResult.data
       ? await resolveConfigRef(refResult.data)
@@ -187,20 +209,6 @@ export async function deleteConversation(input: { conversationId: string }) {
   });
 }
 
-export async function getProfileDescription(profile: string) {
-  const result = PROFILE_SCHEMA.safeParse(profile);
-  const p: Profile = result.success ? result.data : "economical";
-  return describeProfile(p);
-}
-
-export async function getProfiles() {
-  return (["economical", "best", "custom"] as const).map((p) => ({
-    profile: p,
-    config: getProfile(p),
-    description: describeProfile(p),
-  }));
-}
-
 // --- Credentials (Providers) ---
 
 export async function saveApiKey(input: { provider: string; apiKey: string }) {
@@ -217,6 +225,7 @@ export async function saveApiKey(input: { provider: string; apiKey: string }) {
 
 export async function listProvidersStatus() {
   return asUser(async () => {
+    await ensureUserSetup();
     const store = await getStore();
     const credentials = await store.listCredentials();
     const configured = new Set(credentials.map((c) => c.provider));
@@ -225,10 +234,6 @@ export async function listProvidersStatus() {
     const addSpec = (spec: { provider: string }) => {
       if (spec.provider !== "mock") neededSet.add(spec.provider);
     };
-    for (const p of ["economical", "best"] as const) {
-      const base = getProfile(p);
-      [base.orchestrator, base.consensus, base.synthesis, ...base.analysts].forEach(addSpec);
-    }
     for (const c of await store.listConfigs()) {
       [c.config.orchestrator, c.config.consensus, c.config.synthesis, ...c.config.analysts].forEach(addSpec);
     }
@@ -266,13 +271,62 @@ export async function saveCustomConfig(input: { name: string; config: Orchestrat
   return asUser(async () => {
     const name = input.name.trim();
     if (!name) throw new Error("name_required");
+    const config = CONFIG_SCHEMA.parse(input.config);
+    await ensureUserSetup();
     const store = await getStore();
-    return store.saveConfig(name, "custom", input.config);
+    return store.saveConfig(name, "custom", { ...config, profile: "custom" });
+  });
+}
+
+export async function updateCustomConfig(input: {
+  id: string;
+  name?: string;
+  config?: OrchestrationConfig;
+}) {
+  return asUser(async () => {
+    const id = z.string().min(1).parse(input.id);
+    const name = input.name?.trim();
+    if (input.name !== undefined && !name) throw new Error("name_required");
+    const config = input.config ? CONFIG_SCHEMA.parse(input.config) : undefined;
+    const store = await getStore();
+    const current = await store.getConfig(id);
+    if (!current) throw new Error("configuration_not_found");
+    return store.updateConfig(id, {
+      name,
+      config: config ? { ...config, profile: "custom" } : undefined,
+    });
+  });
+}
+
+export async function duplicateCustomConfig(input: { id: string }) {
+  return asUser(async () => {
+    const id = z.string().min(1).parse(input.id);
+    await ensureUserSetup();
+    const store = await getStore();
+    const source = await store.getConfig(id);
+    if (!source) throw new Error("configuration_not_found");
+    return store.saveConfig(`${source.name} (copie)`, "custom", source.config);
+  });
+}
+
+export async function deleteCustomConfig(input: { id: string }) {
+  return asUser(async () => {
+    const id = z.string().min(1).parse(input.id);
+    await ensureUserSetup();
+    const store = await getStore();
+    const configs = await store.listConfigs();
+    if (!configs.some((c) => c.id === id)) throw new Error("configuration_not_found");
+    if (configs.length <= 1) throw new Error("cannot_delete_last_configuration");
+    const ref = await store.getActiveConfig();
+    if (ref.type === "saved" && ref.id === id) throw new Error("cannot_delete_active_configuration");
+    await store.deleteConfig(id);
+    return { ok: true };
   });
 }
 
 export async function listSavedConfigs() {
   return asUser(async () => {
+    await ensureUserSetup();
     const store = await getStore();
     return store.listConfigs();
   });

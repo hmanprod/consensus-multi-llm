@@ -15,7 +15,10 @@ function formatDate(ts: number | null): string | null {
 }
 
 function providerModelLabel(provider: string): string | null {
-  return MODELS_BY_PROVIDER[provider]?.[0]?.label ?? null;
+  const models = MODELS_BY_PROVIDER[provider];
+  if (!models || models.length === 0) return null;
+  if (models.length === 1) return models[0].label;
+  return `${models.length} modèles disponibles`;
 }
 
 export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {

@@ -1,4 +1,4 @@
-import type { ActiveConfig, RunResult } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
 import { currentUserId } from "@/lib/user-context";
@@ -229,7 +229,7 @@ export const prismaStore: Store = {
         analystModelIds: config.analysts.map((a) => `${a.provider}/${a.model}`),
       },
     });
-    return { id: c.id, name: c.name, profile: c.profile as StoredConfig["profile"], config, createdAt: c.createdAt.getTime() };
+    return toStoredConfig(c, config);
   },
 
   async listConfigs() {
@@ -238,25 +238,45 @@ export const prismaStore: Store = {
       where: { userId },
       orderBy: { createdAt: "desc" },
     });
-    return all.map((c) => ({
-      id: c.id,
-      name: c.name,
-      profile: c.profile as StoredConfig["profile"],
-      config: decodeConfig(c),
-      createdAt: c.createdAt.getTime(),
-    }));
+    return all.map((c) => toStoredConfig(c));
   },
 
   async getConfig(id) {
+    const { userId } = await ensureUser();
     const c = await getPrisma().orchestrationConfiguration.findUnique({ where: { id } });
-    if (!c) return null;
-    return {
-      id: c.id,
-      name: c.name,
-      profile: c.profile as StoredConfig["profile"],
-      config: decodeConfig(c),
-      createdAt: c.createdAt.getTime(),
-    };
+    if (!c || c.userId !== userId) return null;
+    return toStoredConfig(c);
+  },
+
+  async updateConfig(id, patch) {
+    const { userId } = await ensureUser();
+    const data: Record<string, unknown> = { name: patch.name };
+    if (patch.config) {
+      data.configJson = patch.config;
+      data.profile = patch.config.profile;
+      data.maxRounds = patch.config.maxRounds;
+      data.maxBudgetCents = patch.config.maxBudgetCents;
+      data.maxTokens = patch.config.maxTokensPerCall;
+      data.timeoutMs = patch.config.timeoutMs;
+      data.minAgreementScore = patch.config.minAgreementScore;
+      data.analystModelIds = patch.config.analysts.map((a) => `${a.provider}/${a.model}`);
+    }
+    const res = await getPrisma().orchestrationConfiguration.updateMany({
+      where: { id, userId },
+      data,
+    });
+    if (res.count === 0) throw new Error("configuration_not_found");
+    const c = await getPrisma().orchestrationConfiguration.findUnique({ where: { id } });
+    if (!c) throw new Error("configuration_not_found");
+    return toStoredConfig(c);
+  },
+
+  async deleteConfig(id) {
+    const { userId } = await ensureUser();
+    const res = await getPrisma().orchestrationConfiguration.deleteMany({
+      where: { id, userId },
+    });
+    if (res.count === 0) throw new Error("configuration_not_found");
   },
 
   async setActiveConfig(ref) {
@@ -282,6 +302,8 @@ function mask(encryptedKey: string): string {
 }
 
 type ConfigRow = {
+  id: string;
+  name: string;
   profile: string;
   configJson: unknown;
   maxRounds: number;
@@ -289,7 +311,20 @@ type ConfigRow = {
   maxTokens: number;
   timeoutMs: number;
   minAgreementScore: number;
+  createdAt: Date;
+  updatedAt: Date;
 };
+
+function toStoredConfig(c: ConfigRow, overrideConfig?: OrchestrationConfig): StoredConfig {
+  return {
+    id: c.id,
+    name: c.name,
+    profile: c.profile as StoredConfig["profile"],
+    config: overrideConfig ?? decodeConfig(c),
+    createdAt: c.createdAt.getTime(),
+    updatedAt: c.updatedAt.getTime(),
+  };
+}
 
 function decodeConfig(c: ConfigRow) {
   const json = c.configJson as { orchestrator?: unknown; analysts?: unknown } | null;
