@@ -9,7 +9,7 @@ import {
   deleteConversation,
   executeRun,
   getConversationData,
-  getRunProgress,
+  getRunSnapshot,
   listAllConversations,
   listProvidersStatus,
   renameConversation,
@@ -20,12 +20,12 @@ import { Sidebar } from "./Sidebar";
 import { EmptyState } from "./EmptyState";
 import { Composer } from "./Composer";
 import { ConversationWorkflow } from "./ConversationWorkflow";
-import { ConsensusSummaryCard } from "./ConsensusSummaryCard";
+import { WorkflowMessage } from "./WorkflowMessage";
 import { OutputPanel, type OutputPanelTab } from "./OutputPanel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { IconButton } from "./ui/IconButton";
 import { Toast, type ToastTone } from "./ui/Toast";
-import { ChevronDownIcon, CloseIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
+import { ChevronDownIcon, CheckIcon, CloseIcon, CopyIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 type OutputState = { runId: string; activeTab: OutputPanelTab };
@@ -64,6 +64,7 @@ export function AppShell({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [showJump, setShowJump] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const activeConfig: OrchestrationConfig = resolveActiveRef(activeRef, savedConfigs);
   const missing = useMissingProviders(activeConfig, providersStatus);
@@ -167,30 +168,43 @@ export function AppShell({
       if (abortRef.current) return;
       setSelectedId(res.conversationId);
       currentRunIdRef.current = res.runId;
+
+      await executeRun({ runId: res.runId, question, configRef: activeRef });
+
+      const stopPolling = () => {
+        if (pollId) clearInterval(pollId);
+        pollId = null;
+      };
       const poll = async () => {
+        if (abortRef.current || !pollId || currentRunIdRef.current !== res.runId) {
+          stopPolling();
+          return;
+        }
         try {
-          const progress = await getRunProgress(res.runId);
-          if (currentRunIdRef.current === res.runId && progress.length) setActiveProgress(progress);
+          const snap = await getRunSnapshot(res.runId);
+          if (abortRef.current || !pollId || currentRunIdRef.current !== res.runId) {
+            stopPolling();
+            return;
+          }
+          if (snap.progress.length) setActiveProgress(snap.progress);
+          if (snap.status !== "running") {
+            stopPolling();
+            setBusy(false);
+            setActiveProgress([]);
+            await refreshConversation(res.conversationId);
+            setConversations(await listAllConversations());
+            setQuestion("");
+          }
         } catch {
-          // progression indisponible : on garde l'état actuel
+          // statut indisponible : on retente au prochain tick
         }
       };
       poll();
       pollId = setInterval(poll, 700);
-      await executeRun({ runId: res.runId, question, configRef: activeRef });
-      if (abortRef.current) return;
-      await refreshConversation(res.conversationId);
-      setConversations(await listAllConversations());
-      setQuestion("");
     } catch (err) {
       if (abortRef.current) return;
       setError(err instanceof Error ? err.message : "Erreur inattendue");
-    } finally {
-      if (pollId) clearInterval(pollId);
-      if (!abortRef.current) {
-        setBusy(false);
-        setActiveProgress([]);
-      }
+      setBusy(false);
     }
   }
 
@@ -220,6 +234,12 @@ export function AppShell({
   async function copyMessage(content: string) {
     await navigator.clipboard.writeText(content);
     showToast("Réponse copiée.", "success");
+  }
+
+  async function copyUserMessage(content: string, id: string) {
+    await navigator.clipboard.writeText(content);
+    setCopiedMessageId(id);
+    setTimeout(() => setCopiedMessageId((v) => (v === id ? null : v)), 1500);
   }
 
   function downloadMessage(content: string, runId: string) {
@@ -313,7 +333,7 @@ export function AppShell({
         )}
 
         <div ref={scrollRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto overscroll-contain">
-          {isEmpty ? (
+          {isEmpty && !busy ? (
             <EmptyState
               question={question}
               setQuestion={setQuestion}
@@ -328,14 +348,25 @@ export function AppShell({
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
               {messages.map((m) =>
                 m.role === "user" ? (
-                  <div key={m.id} className="flex flex-col items-end gap-1">
+                  <div key={m.id} className="flex flex-col items-end gap-1.5">
                     <span className="text-[11px] leading-none text-ink-faint">{fmtTime(m.createdAt)}</span>
-                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-surface px-4 py-2.5 text-[15px] leading-relaxed text-ink">
-                      {m.content}
+                    <div className="group relative max-w-[85%]">
+                      <div className="whitespace-pre-wrap rounded-2xl rounded-tr-md bg-surface px-4 py-2.5 pr-20 text-[15px] leading-relaxed text-ink">
+                        {m.content}
+                      </div>
+                      <button
+                        onClick={() => copyUserMessage(m.content, m.id)}
+                        aria-label="Copier ma demande"
+                        title="Copier"
+                        className="absolute -bottom-2 right-2 inline-flex h-7 items-center gap-1 rounded-full border border-border bg-bg px-2 text-[11px] font-medium text-ink-secondary opacity-0 shadow-sm transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        {copiedMessageId === m.id ? <CheckIcon size={12} className="text-success" /> : <CopyIcon size={12} />}
+                        <span>{copiedMessageId === m.id ? "Copié" : "Copier"}</span>
+                      </button>
                     </div>
                   </div>
                 ) : m.runId ? (
-                  <ConsensusSummaryCard
+                  <WorkflowMessage
                     key={m.id}
                     content={m.content}
                     runId={m.runId}
@@ -357,6 +388,7 @@ export function AppShell({
                   key={runKey}
                   progress={activeProgress}
                   startedAt={activeStartedAt}
+                  analystCount={activeConfig.analysts.length + 1}
                   onStop={stopAnalysis}
                 />
               )}

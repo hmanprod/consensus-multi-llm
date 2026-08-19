@@ -10,6 +10,7 @@ import { researchCall } from "./gateway";
 
 export interface AnalystAgentDeps {
   generate(req: GenerationRequest): Promise<GenerationResult>;
+  onPhase?(phase: "searching" | "writing"): void;
 }
 
 export interface AnalystAgentInput {
@@ -20,6 +21,7 @@ export interface AnalystAgentInput {
   maxTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  prompt?: (question: string, label: string) => { system: string; user: string };
 }
 
 export interface AnalystAgentResult {
@@ -74,9 +76,10 @@ export async function runAnalystAgent(
   deps: AnalystAgentDeps
 ): Promise<AnalystAgentResult> {
   const { question, label, spec, policy, maxTokens, timeoutMs, signal } = input;
+  const prompt = input.prompt ?? analystResearchPrompt;
   const messages = [
-    { role: "system" as const, content: analystResearchPrompt(question, label).system },
-    { role: "user" as const, content: analystResearchPrompt(question, label).user },
+    { role: "system" as const, content: prompt(question, label).system },
+    { role: "user" as const, content: prompt(question, label).user },
   ];
 
   const res = await researchCall(
@@ -84,7 +87,8 @@ export async function runAnalystAgent(
     messages,
     policy,
     deps,
-    { maxTokens, timeoutMs, signal }
+    { maxTokens, timeoutMs, signal },
+    deps.onPhase
   );
 
   const analysis = res.text.trim();

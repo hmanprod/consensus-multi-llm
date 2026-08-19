@@ -382,7 +382,7 @@ function ConfigEditor({
         </div>
         <div className="space-y-3">
           <div className="rounded-lg border border-border bg-bg p-3">
-            <p className="mb-2 text-xs font-medium text-ink">Orchestrateur (analyse A + synthèse)</p>
+            <p className="mb-2 text-xs font-medium text-ink">Orchestrateur (Analyse A + consolidations)</p>
             <RolePicker label="Orchestrateur" spec={draft.orchestrator} onChange={setOrchestrator} />
           </div>
           {draft.analysts.map((a, i) => (
@@ -608,7 +608,7 @@ function ConfigCard({
             </div>
           )}
           <p className="mt-1 text-xs text-ink-secondary">
-            {config.config.analysts.length + 1} analystes
+            {config.config.analysts.length + 1} analystes (A orchestrateur inclus)
           </p>
         </div>
         {!active && (

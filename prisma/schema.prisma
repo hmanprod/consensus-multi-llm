@@ -125,6 +125,7 @@ model WorkflowRun {
   durationMs    Int?
   error         String?
   resultJson    Json?
+  progressJson  Json?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   invocations   ModelInvocation[]

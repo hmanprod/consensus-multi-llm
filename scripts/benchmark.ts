@@ -70,30 +70,31 @@ function argValue(name: string): string | undefined {
 
 function uniqueSources(result: RunResult): Set<string> {
   const set = new Set<string>();
-  for (const a of result.initialAnalyses) {
+  for (const a of result.analyses) {
     for (const s of a.dossier?.sources ?? []) set.add(s.url);
   }
   return set;
 }
 
 function runMetrics(result: RunResult, corpusId: string, question: string): RunMetrics {
-  const modes = result.initialAnalyses.map((a) => a.dossier?.mode).filter(Boolean) as ResearchMode[];
+  const modes = result.analyses.map((a) => a.dossier?.mode).filter(Boolean) as ResearchMode[];
   const mode: ResearchMode = modes.includes("native") ? "native" : modes.includes("mock") ? "mock" : "disabled";
   const sources = uniqueSources(result);
   let evidenceCount = 0;
   let resolvableCount = 0;
-  for (const a of result.initialAnalyses) {
+  for (const a of result.analyses) {
     const byId = new Set((a.dossier?.sources ?? []).map((s) => s.id));
     for (const ev of a.dossier?.evidence ?? []) {
       evidenceCount += 1;
       if (ev.sourceIds.some((id) => byId.has(id))) resolvableCount += 1;
     }
   }
-  const contradictionLine = result.consolidated.text
+  const consensusText = result.consensus.text;
+  const contradictionLine = consensusText
     .split("\n")
     .find((l) => /^#{1,4}\s+Contradictions/i.test(l));
   const contradictionText = contradictionLine
-    ? result.consolidated.text.slice(result.consolidated.text.indexOf(contradictionLine))
+    ? consensusText.slice(consensusText.indexOf(contradictionLine))
     : "";
   const contradictions =
     contradictionText.length > 0 && !/^\s*none\s*$/i.test(contradictionText.trim().replace(/^#{1,4}\s+Contradictions/i, "").trim());
@@ -107,9 +108,9 @@ function runMetrics(result: RunResult, corpusId: string, question: string): RunM
     tokens: result.totalTokens,
     sources: sources.size,
     evidence: evidenceCount,
-    queries: result.initialAnalyses.reduce((acc, a) => acc + (a.dossier?.queries.length ?? 0), 0),
+    queries: result.analyses.reduce((acc, a) => acc + (a.dossier?.queries.length ?? 0), 0),
     contradictions,
-    uncertainties: result.initialAnalyses.reduce((acc, a) => acc + (a.dossier?.uncertainties.length ?? 0), 0),
+    uncertainties: result.analyses.reduce((acc, a) => acc + (a.dossier?.uncertainties.length ?? 0), 0),
     unverifiedInReport: report?.unverified?.length ?? 0,
     sourcesInReport: report?.sources?.length ?? 0,
     reportParsed: Boolean(report),

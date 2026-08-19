@@ -31,9 +31,11 @@ export async function researchCall(
   messages: ChatMessage[],
   policy: ResearchPolicy,
   deps: ResearchGatewayDeps,
-  opts?: { temperature?: number; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal }
+  opts?: { temperature?: number; maxTokens?: number; timeoutMs?: number; signal?: AbortSignal },
+  onPhase?: (phase: "searching" | "writing") => void
 ): Promise<ResearchCallResult> {
   if (!policy.enabled) {
+    onPhase?.("writing");
     const res = await deps.generate({ spec, messages, ...opts });
     return { text: res.text, usage: res.usage, latencyMs: res.latencyMs, research: DISABLED };
   }
@@ -42,10 +44,12 @@ export async function researchCall(
   const mode = researchModeFor(spec, hasKey);
 
   if (mode === "disabled") {
+    onPhase?.("writing");
     const res = await deps.generate({ spec, messages, ...opts });
     return { text: res.text, usage: res.usage, latencyMs: res.latencyMs, research: DISABLED };
   }
 
+  onPhase?.("searching");
   const res = await deps.generate({ spec, messages, search: policy, ...opts });
   return {
     text: res.text,

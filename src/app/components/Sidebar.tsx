@@ -472,11 +472,31 @@ function ConversationNavLink({ href, label, children }: { href: string; label: s
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink text-bg">
-        <span className="text-sm font-bold">C</span>
+      <span
+        className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink text-bg shadow-sm"
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 28 28" className="h-7 w-7" fill="none">
+          <path
+            d="M20.5 7.2A8.4 8.4 0 1 0 20.5 20.8"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M19.4 8.1 21.8 6m-2.4 13.9 2.4 2.1"
+            stroke="#69b5f5"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <circle cx="21.6" cy="6" r="1.35" fill="#69b5f5" />
+          <circle cx="21.6" cy="22" r="1.35" fill="#69b5f5" />
+        </svg>
       </span>
       {!compact && (
-        <span className="text-sm font-semibold tracking-tight text-ink">Consensus</span>
+        <span className="font-serif text-[15px] font-semibold tracking-[-0.02em] text-ink">
+          Consensus
+        </span>
       )}
     </div>
   );

@@ -49,15 +49,20 @@ export interface FinalSynthesisOutput extends AnalysisOutput {
   report?: ConsensusReport;
 }
 
-export type WorkflowStep = "A" | "B" | "S" | "R" | "F";
+export type WorkflowStep = "A" | "B" | "C" | "AB" | "ABC" | "B+ABC" | "C+ABC" | "S" | "F";
 
-export type WorkflowProgressStatus = "pending" | "running" | "done" | "error";
+export type WorkflowOutputKind =
+  | "independent-analysis"
+  | "combined-analysis"
+  | "revision"
+  | "consensus"
+  | "final-synthesis";
+
+export type WorkflowProgressStatus = "pending" | "searching" | "writing" | "running" | "done" | "error";
 
 export interface WorkflowProgress {
   step: WorkflowStep;
   status: WorkflowProgressStatus;
-  completed?: number;
-  total?: number;
   label: string;
   detail?: string;
   durationMs?: number;
@@ -72,10 +77,10 @@ export interface TimelineEntry {
 }
 
 export interface RunResult {
-  analysisA: AnalysisOutput;
-  initialAnalyses: AnalysisOutput[];
-  consolidated: AnalysisOutput;
-  revisedAnalyses: AnalysisOutput[];
+  analyses: AnalysisOutput[];
+  consolidations: AnalysisOutput[];
+  revisions: AnalysisOutput[];
+  consensus: FinalSynthesisOutput;
   finalSynthesis: FinalSynthesisOutput;
   timeline: TimelineEntry[];
   estimatedCostCents: number;

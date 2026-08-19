@@ -159,29 +159,60 @@ export async function executeRun(input: {
       ? await resolveConfigRef(refResult.data)
       : await resolveConfigRef(await getActiveConfigRef());
 
-    await bindStoredKeys();
-
-    try {
-      const result = await runWorkflow(input.question, config, {
-        generate,
-        onProgress: (progress) => recordProgress(input.runId, progress),
-      });
-      await store.setRunResult(run.runId, result);
-      await store.addMessage(run.conversationId, "assistant", result.finalSynthesis.text, run.runId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "erreur inconnue";
-      await store.failRun(run.runId, message);
-      await store.addMessage(run.conversationId, "assistant", `Une erreur est survenue : ${message}`, run.runId);
-    } finally {
-      clearProgress(input.runId);
-    }
-
+    const userId = userStorage.getStore() ?? "demo";
+    void userStorage.run(userId, () =>
+      runWorkflowInBackground(input.runId, run.conversationId, input.question, config)
+    );
     return { ok: true };
   });
 }
 
+async function runWorkflowInBackground(
+  runId: string,
+  conversationId: string,
+  question: string,
+  config: OrchestrationConfig
+) {
+  try {
+    await bindStoredKeys();
+    const result = await runWorkflow(question, config, {
+      generate,
+      onProgress: async (progress) => {
+        await recordProgress(runId, progress);
+      },
+    });
+    const store = await getStore();
+    await store.setRunResult(runId, result);
+    await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, runId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "erreur inconnue";
+    try {
+      const store = await getStore();
+      await store.failRun(runId, message);
+      await store.addMessage(conversationId, "assistant", `Une erreur est survenue : ${message}`, runId);
+    } catch {
+      // Le run a peut-être déjà disparu : on ignore.
+    }
+  } finally {
+    await clearProgress(runId);
+  }
+}
+
 export async function getRunProgress(runId: string) {
   return asUser(async () => getProgress(runId));
+}
+
+export async function getRunSnapshot(runId: string) {
+  return asUser(async () => {
+    const store = await getStore();
+    const run = await store.getRun(runId);
+    const progress = await getProgress(runId);
+    return {
+      status: run?.status ?? "unknown",
+      question: run?.question ?? null,
+      progress,
+    };
+  });
 }
 
 async function asUser<T>(fn: () => Promise<T>): Promise<T> {

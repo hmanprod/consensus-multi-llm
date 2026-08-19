@@ -1,4 +1,4 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult, RunStatus } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, RunStatus, WorkflowProgress } from "@/contracts/workflow";
 
 export interface StoredMessage {
   id: string;
@@ -58,6 +58,9 @@ export interface Store {
   listRuns(conversationId: string): Promise<StoredRun[]>;
   setRunResult(runId: string, result: RunResult): Promise<StoredRun>;
   failRun(runId: string, error: string): Promise<StoredRun>;
+  getRunProgress(runId: string): Promise<WorkflowProgress[]>;
+  setRunProgress(runId: string, progress: WorkflowProgress[]): Promise<void>;
+  clearRunProgress(runId: string): Promise<void>;
   saveCredential(provider: string, encryptedKey: string, keyIv: string): Promise<void>;
   getCredential(provider: string): Promise<{ encryptedKey: string; keyIv: string } | null>;
   listCredentials(): Promise<StoredCredential[]>;

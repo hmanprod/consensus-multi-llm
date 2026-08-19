@@ -111,9 +111,11 @@ export function describeProfile(profile: Profile): string {
   return [
     `Profil ${label}`,
     ...(MOCK_MODE ? ["Mode démo actif (provider mock, aucun coût réel)."] : []),
-    `Processus collaboratif : Analyse A (orchestrateur) → consolidation → révisions → analyse finale.`,
-    line("Orchestrateur (Analyse A + consolidation + finale)", cfg.orchestrator),
-    `Analystes (${cfg.analysts.length})`,
+    `Processus collaboratif : Analyse A (orchestrateur) → analyses indépendantes → consolidations → révisions → consensus → synthèse finale.`,
+    line("Orchestrateur (Analyse A + consolidations)", cfg.orchestrator),
+    line("Consensus", cfg.consensus),
+    line("Synthèse", cfg.synthesis),
+    `Analystes (${cfg.analysts.length + 1} au total, orchestrateur inclus)`,
     ...cfg.analysts.map((a, i) => `  ${String.fromCharCode(66 + i)} — ${a.provider}/${a.model}`),
   ].join("\n");
 }

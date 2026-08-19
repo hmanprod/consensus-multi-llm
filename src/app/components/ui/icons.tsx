@@ -191,6 +191,16 @@ export function PencilIcon(props: IconProps) {
   );
 }
 
+export function ScaleIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v18M8 21h8" />
+      <path d="M3 6h18" />
+      <path d="M6 6 3.5 13a3 3 0 0 0 5 0L6 6ZM18 6l-2.5 7a3 3 0 0 0 5 0L18 6Z" />
+    </Icon>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <Icon {...props}>

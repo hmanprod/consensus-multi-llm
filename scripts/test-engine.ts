@@ -10,10 +10,10 @@ async function main() {
   const question = "Quels sont les avantages et risques d'adopter l'IA générative dans une PME ?";
   const result = await runWorkflow(question, config, { generate });
 
-  console.log("ANALYSE A:", result.analysisA.label, "|", result.analysisA.text.slice(0, 80).replace(/\n/g, " "));
-  console.log("INITIALES:", result.initialAnalyses.map((a) => `${a.label} (${a.model.provider}/${a.model.model})`));
-  console.log("CONSOLIDEE:", result.consolidated.label, "|", result.consolidated.text.slice(0, 80).replace(/\n/g, " "));
-  console.log("REVISIONS:", result.revisedAnalyses.map((a) => a.label));
+  console.log("ANALYSES:", result.analyses.map((a) => `${a.label} (${a.model.provider}/${a.model.model})`));
+  console.log("CONSOLIDATIONS:", result.consolidations.map((a) => a.label));
+  console.log("REVISIONS:", result.revisions.map((a) => `${a.label} (${a.model.provider}/${a.model.model})`));
+  console.log("CONSENSUS:", result.consensus.label, "|", result.consensus.model.provider, "|", result.consensus.report ? "report ok" : "report absent");
   console.log("COST:", result.estimatedCostCents, "->", result.actualCostCents, "cents");
   console.log("TOKENS:", result.totalTokens, "LATENCY:", result.totalLatencyMs, "ms");
   console.log("TIMELINE:");

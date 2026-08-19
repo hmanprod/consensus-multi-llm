@@ -5,6 +5,7 @@ import type {
   RunResult,
   TimelineEntry,
   WorkflowProgress,
+  WorkflowStep,
 } from "@/contracts/workflow";
 import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage } from "@/contracts/gateway";
 import type { AnalystDossier, ResearchSource } from "@/contracts/research";
@@ -15,6 +16,7 @@ import { runAnalystAgent } from "@/research/analyst-agent";
 import { DEFAULT_RESEARCH_POLICY } from "@/config/research";
 import {
   consolidationPrompt,
+  consensusPrompt,
   describeConfig,
   finalSynthesisPrompt,
   orchestratorAnalysisPrompt,
@@ -33,12 +35,14 @@ function roughTokens(text: string): number {
   return Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / WORDS_PER_TOKEN));
 }
 
-function analystLabel(index: number): string {
-  return String.fromCharCode(66 + index); // B, C, D, ...
-}
-
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+const ANALYST_STAGGER_MS = 2000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function runWorkflow(
@@ -67,6 +71,10 @@ class Orchestrator {
 
   private emit(progress: WorkflowProgress) {
     this.deps.onProgress?.(progress);
+  }
+
+  private analystLabel(index: number): string {
+    return String.fromCharCode(66 + index); // B, C, ...
   }
 
   private account(spec: ModelSpec, usage: Usage, latencyMs: number) {
@@ -108,9 +116,16 @@ class Orchestrator {
     ];
   }
 
-  private async runAnalyst(index: number, spec: ModelSpec): Promise<AnalysisOutput> {
-    const label = analystLabel(index);
+  private async runResearchAnalysis(
+    label: string,
+    spec: ModelSpec,
+    role: "orchestrator" | "analyst",
+    index?: number,
+    prompt?: (question: string, label: string) => { system: string; user: string }
+  ): Promise<AnalysisOutput> {
+    const step = label as WorkflowStep;
     const t = Date.now();
+    this.emit({ step, status: "searching", label: `Analyse ${label}`, detail: "Recherche en cours" });
     try {
       const res = await runAnalystAgent(
         {
@@ -124,14 +139,20 @@ class Orchestrator {
           },
           maxTokens: this.config.maxTokensPerCall,
           timeoutMs: this.config.timeoutMs,
+          prompt,
         },
-        { generate: this.deps.generate }
+        {
+          generate: this.deps.generate,
+          onPhase: (phase) => this.emit({ step, status: phase, label: `Analyse ${label}` }),
+        }
       );
       this.account(spec, res.usage, res.latencyMs);
-      this.tick("B", `Recherche + analyse initiale ${label}`, "done", Date.now() - t, `${spec.provider}/${spec.model} · ${res.dossier.mode}`);
+      this.tick(step, `Analyse ${label} (${role})`, "done", Date.now() - t, `${spec.provider}/${spec.model} · ${res.dossier.mode}`);
+      this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t });
+      if (index !== undefined) this.lastAnalystTexts[index] = res.dossier.analysis;
       return {
         label,
-        role: "analyst",
+        role,
         analystIndex: index,
         model: spec,
         text: res.dossier.analysis,
@@ -140,10 +161,12 @@ class Orchestrator {
       };
     } catch (err) {
       const msg = message(err);
-      this.tick("B", `Recherche + analyse initiale ${label}`, "error", Date.now() - t, msg);
+      this.tick(step, `Analyse ${label} (${role})`, "error", Date.now() - t, msg);
+      this.emit({ step, status: "error", label: `Analyse ${label}`, durationMs: Date.now() - t, detail: msg });
+      if (index !== undefined) this.lastAnalystTexts[index] = `[étape non effectuée : ${msg}]`;
       return {
         label,
-        role: "analyst",
+        role,
         analystIndex: index,
         model: spec,
         text: `[étape non effectuée : ${msg}]`,
@@ -152,26 +175,55 @@ class Orchestrator {
     }
   }
 
-  private toSourceRefs(sources: ResearchSource[] | undefined, cap = 6): SourceRef[] {
-    return (sources ?? []).slice(0, cap).map((s) => ({ url: s.url, title: s.title }));
+  private async runOrchestratorAnalysis(): Promise<AnalysisOutput> {
+    return this.runResearchAnalysis("A", this.config.orchestrator, "orchestrator", undefined, orchestratorAnalysisPrompt);
   }
 
-  private extractSection(text: string, heading: string): string | null {
-    const out: string[] = [];
-    let capture = false;
-    for (const raw of text.split("\n")) {
-      const line = raw.trim();
-      const h = /^#{1,4}\s+(.*)$/.exec(line);
-      if (h) {
-        if (h[1].toLowerCase().startsWith(heading.toLowerCase())) {
-          capture = true;
-          continue;
-        }
-        if (capture) break;
-      }
-      if (capture) out.push(line);
-    }
-    return out.length ? out.join("\n").trim() : null;
+  private async runAnalyst(index: number, spec: ModelSpec): Promise<AnalysisOutput> {
+    return this.runResearchAnalysis(this.analystLabel(index), spec, "analyst", index);
+  }
+
+  private async runRevision(
+    index: number,
+    spec: ModelSpec,
+    fullLabel: string,
+    fullText: string
+  ): Promise<AnalysisOutput> {
+    const letter = this.analystLabel(index);
+    const label = `${letter}+${fullLabel}`;
+    const step = label as WorkflowStep;
+    const t = Date.now();
+    this.emit({ step, status: "writing", label: `Révision ${label}` });
+    const res = await this.safeCall(
+      spec,
+      this.messages(revisionPrompt(letter, this.lastAnalystText(index), fullLabel, fullText))
+    );
+    this.tick(step, `Révision ${label} (analyste)`, res.error ? "error" : "done", Date.now() - t, res.error);
+    this.emit({
+      step,
+      status: res.error ? "error" : "done",
+      label: `Révision ${label}`,
+      durationMs: Date.now() - t,
+      detail: res.error,
+    });
+    return {
+      label,
+      role: "analyst",
+      analystIndex: index,
+      model: spec,
+      text: res.text,
+      usage: res.usage,
+    };
+  }
+
+  private lastAnalystText(index: number): string {
+    return this.lastAnalystTexts[index] ?? this.analystLabel(index);
+  }
+
+  private lastAnalystTexts: string[] = [];
+
+  private toSourceRefs(sources: ResearchSource[] | undefined, cap = 6): SourceRef[] {
+    return (sources ?? []).slice(0, cap).map((s) => ({ url: s.url, title: s.title }));
   }
 
   private mergedDossier(analyses: AnalysisOutput[]): AnalystDossier {
@@ -211,176 +263,121 @@ class Orchestrator {
     const estimatedCostCents = this.estimate();
     const analystCount = this.config.analysts.length;
 
-    // A — Analyse A (orchestrateur)
-    this.emit({ step: "A", status: "running", label: "Compréhension de la question" });
-    const tA = Date.now();
-    const aRes = await this.safeCall(
-      this.config.orchestrator,
-      this.messages(orchestratorAnalysisPrompt(this.question))
+    // A — Analyse orchestrateur (première analyse, avec recherche si dispo)
+    const analysisA = await this.runOrchestratorAnalysis();
+
+    // B, C — analyses indépendantes des analystes (parallèle, démarrage décalé)
+    const analystAnalyses = await Promise.all(
+      this.config.analysts.map(async (spec, i) => {
+        if (i > 0) await sleep(ANALYST_STAGGER_MS * i);
+        return this.runAnalyst(i, spec);
+      })
     );
-    const analysisA: AnalysisOutput = {
-      label: "A",
-      role: "orchestrator",
-      model: this.config.orchestrator,
-      text: aRes.text,
-      usage: aRes.usage,
-    };
-    this.tick("A", "Analyse A (orchestrateur)", aRes.error ? "error" : "done", Date.now() - tA);
-    this.emit({
-      step: "A",
-      status: aRes.error ? "error" : "done",
-      label: "Compréhension de la question",
-      durationMs: Date.now() - tA,
-      detail: aRes.error,
-    });
+    const analyses = [analysisA, ...analystAnalyses];
 
-    // B — Recherches + analyses initiales des analystes (parallèle)
-    this.emit({ step: "B", status: "running", label: "Analyses indépendantes", completed: 0, total: analystCount });
-    const tB = Date.now();
-    let bDone = 0;
-    const bTasks = this.config.analysts.map((spec, i) => {
-      const task = this.runAnalyst(i, spec);
-      task.then(() => {
-        bDone += 1;
-        this.emit({
-          step: "B",
-          status: "running",
-          label: "Analyses indépendantes",
-          completed: bDone,
-          total: analystCount,
-        });
-      });
-      return task;
-    });
-    const initialAnalyses = await Promise.all(bTasks);
-    this.emit({
-      step: "B",
-      status: "done",
-      label: "Analyses indépendantes",
-      completed: analystCount,
-      total: analystCount,
-      durationMs: Date.now() - tB,
-    });
-    this.tick("B", "Recherches et analyses initiales", "done", Date.now() - tB, `${initialAnalyses.length} analystes`);
-
-    // S — Consolidation A → AB → ABC → ... avec provenance des sources
-    this.emit({ step: "S", status: "running", label: "Mise en commun" });
-    const tS = Date.now();
-    let consolidatedText = analysisA.text;
-    let consolidatedLabel = "A";
-    let mergedSources: SourceRef[] = [];
-    let consolidationError: string | undefined;
-    for (let i = 0; i < this.config.analysts.length; i++) {
-      const fromLabel = consolidatedLabel;
-      const nextLabel = consolidatedLabel + analystLabel(i);
-      const newRefs = this.toSourceRefs(initialAnalyses[i].dossier?.sources);
+    // AB, ABC — confrontations successives des analyses (séquentiel)
+    const consolidations: AnalysisOutput[] = [];
+    let currentText = analysisA.text;
+    let currentLabel = "A";
+    let currentDossier = analysisA.dossier;
+    for (let i = 0; i < analystCount; i++) {
+      const newLabel = this.analystLabel(i);
+      const nextLabel = currentLabel + newLabel;
+      const step = nextLabel as WorkflowStep;
+      this.emit({ step, status: "writing", label: `Analyse ${nextLabel}` });
+      const tC = Date.now();
+      const newRefs = this.toSourceRefs(analystAnalyses[i].dossier?.sources);
       const res = await this.safeCall(
         this.config.orchestrator,
         this.messages(
           consolidationPrompt(
             this.question,
-            fromLabel,
+            currentLabel,
             nextLabel,
-            consolidatedText,
-            initialAnalyses[i].text,
-            mergedSources,
+            currentText,
+            analystAnalyses[i].text,
+            this.toSourceRefs(currentDossier?.sources),
             newRefs
           )
         )
       );
-      consolidatedText = res.text;
-      consolidatedLabel = nextLabel;
-      mergedSources = [...mergedSources, ...newRefs]
-        .filter((s, idx, arr) => arr.findIndex((x) => x.url === s.url) === idx)
-        .slice(0, 12);
-      if (res.error) consolidationError = res.error;
-    }
-    const consolidated: AnalysisOutput = {
-      label: consolidatedLabel,
-      role: "orchestrator",
-      model: this.config.orchestrator,
-      text: consolidatedText,
-      usage: { promptTokens: 0, completionTokens: 0 },
-      dossier: this.mergedDossier(initialAnalyses),
-    };
-    this.tick("S", "Consolidation orchestrateur", consolidationError ? "error" : "done", Date.now() - tS, `analyse ${consolidatedLabel}`);
-    this.emit({
-      step: "S",
-      status: consolidationError ? "error" : "done",
-      label: "Mise en commun",
-      durationMs: Date.now() - tS,
-      detail: consolidationError,
-    });
-
-    // R — Révisions des analystes (parallèle) : consolidation + contradictions détectées
-    this.emit({ step: "R", status: "running", label: "Révisions", completed: 0, total: analystCount });
-    const tR = Date.now();
-    const contradictions = this.extractSection(consolidatedText, "contradictions") ?? undefined;
-    let rDone = 0;
-    const rTasks = this.config.analysts.map((spec, i) => {
-      const label = analystLabel(i);
-      const task = this.safeCall(
-        spec,
-        this.messages(
-          revisionPrompt(this.question, label, initialAnalyses[i].text, consolidated.label, consolidated.text, contradictions)
-        )
-      );
-      task.then(() => {
-        rDone += 1;
-        this.emit({
-          step: "R",
-          status: "running",
-          label: "Révisions",
-          completed: rDone,
-          total: analystCount,
-        });
-      });
-      return task;
-    });
-    const rResults = await Promise.all(rTasks);
-    const revisedAnalyses = rResults.map((res, i) => {
-      const label = analystLabel(i);
-      return {
-        label: `${label}${consolidated.label}`,
-        role: "analyst" as const,
-        analystIndex: i,
-        model: this.config.analysts[i],
+      const merged: AnalysisOutput = {
+        label: nextLabel,
+        role: "orchestrator",
+        model: this.config.orchestrator,
         text: res.text,
         usage: res.usage,
-        dossier: initialAnalyses[i].dossier,
+        dossier: this.mergedDossier(analyses.slice(0, i + 2)),
       };
-    });
-    this.emit({
-      step: "R",
-      status: "done",
-      label: "Révisions",
-      completed: analystCount,
-      total: analystCount,
-      durationMs: Date.now() - tR,
-    });
-    this.tick("R", "Révisions des analystes", "done", Date.now() - tR, `${revisedAnalyses.length} révisions`);
+      consolidations.push(merged);
+      this.tick(step, `Analyse ${nextLabel} (orchestrateur)`, res.error ? "error" : "done", Date.now() - tC);
+      this.emit({
+        step,
+        status: res.error ? "error" : "done",
+        label: `Analyse ${nextLabel}`,
+        durationMs: Date.now() - tC,
+        detail: res.error,
+      });
+      currentText = res.text;
+      currentLabel = nextLabel;
+      currentDossier = merged.dossier;
+    }
 
-    // F — Analyse finale par l'orchestrateur
-    this.emit({ step: "F", status: "running", label: "Synthèse finale" });
-    const tF = Date.now();
-    const contributions = [
-      { label: consolidated.label, text: consolidated.text },
-      ...revisedAnalyses.map((r) => ({ label: r.label, text: r.text })),
+    // B+ABC, C+ABC — révisions des analystes (parallèle, démarrage décalé)
+    const fullLabel = consolidations.length > 0 ? consolidations[consolidations.length - 1].label : "A";
+    const fullText = consolidations.length > 0 ? consolidations[consolidations.length - 1].text : analysisA.text;
+    const revisions = await Promise.all(
+      this.config.analysts.map(async (spec, i) => {
+        if (i > 0) await sleep(ANALYST_STAGGER_MS * i);
+        return this.runRevision(i, spec, fullLabel, fullText);
+      })
+    );
+
+    // S — Consensus (config.consensus)
+    const consensusInput = [
+      { label: fullLabel, text: fullText },
+      ...revisions.map((r) => ({ label: r.label, text: r.text })),
     ];
+    this.emit({ step: "S", status: "writing", label: "Consensus" });
+    const tS = Date.now();
+    const cRes = await this.safeCall(
+      this.config.consensus,
+      this.messages(consensusPrompt(this.question, consensusInput))
+    );
+    const consensusText = sanitizeFinalResponse(cRes.text);
+    const consensus: FinalSynthesisOutput = {
+      label: "S",
+      role: "orchestrator",
+      model: this.config.consensus,
+      text: consensusText,
+      usage: cRes.usage,
+      report: parseConsensusReport(consensusText) ?? undefined,
+    };
+    this.tick("S", "Consensus", cRes.error ? "error" : "done", Date.now() - tS, cRes.error);
+    this.emit({
+      step: "S",
+      status: cRes.error ? "error" : "done",
+      label: "Consensus",
+      durationMs: Date.now() - tS,
+      detail: cRes.error,
+    });
+
+    // F — Synthèse finale (config.synthesis)
+    this.emit({ step: "F", status: "writing", label: "Synthèse finale" });
+    const tF = Date.now();
     const fRes = await this.safeCall(
-      this.config.orchestrator,
-      this.messages(finalSynthesisPrompt(this.question, contributions))
+      this.config.synthesis,
+      this.messages(finalSynthesisPrompt(this.question, consensusText))
     );
     const finalText = sanitizeFinalResponse(fRes.text);
     const finalSynthesis: FinalSynthesisOutput = {
-      label: "Final",
+      label: "F",
       role: "orchestrator",
-      model: this.config.orchestrator,
+      model: this.config.synthesis,
       text: finalText,
       usage: fRes.usage,
-      report: parseConsensusReport(finalText) ?? undefined,
     };
-    this.tick("F", "Synthèse finale", fRes.error ? "error" : "done", Date.now() - tF);
+    this.tick("F", "Synthèse finale", fRes.error ? "error" : "done", Date.now() - tF, fRes.error);
     this.emit({
       step: "F",
       status: fRes.error ? "error" : "done",
@@ -390,10 +387,10 @@ class Orchestrator {
     });
 
     return {
-      analysisA,
-      initialAnalyses,
-      consolidated,
-      revisedAnalyses,
+      analyses,
+      consolidations,
+      revisions,
+      consensus,
       finalSynthesis,
       timeline: this.timeline,
       estimatedCostCents: Math.round(estimatedCostCents * 100) / 100,
@@ -405,14 +402,20 @@ class Orchestrator {
 
   private estimate(): number {
     const promptLen = roughTokens(describeConfig(this.config) + this.question);
-    // A(1) + initiales(n) + consolidations(n) + révisions(n) + finale(1)
-    let total = estimateCost(this.config.orchestrator, promptLen, 400);
+    let total = 0;
+    total += estimateCost(this.config.orchestrator, promptLen, 500); // analyse A orchestrateur avec recherche
     for (const a of this.config.analysts) {
-      total += estimateCost(a, promptLen, 500); // analyse initiale avec recherche
-      total += estimateCost(this.config.orchestrator, promptLen * 3, 400); // consolidation
-      total += estimateCost(a, promptLen * 4, 400); // révision
+      total += estimateCost(a, promptLen, 500); // analyse indépendante avec recherche
     }
-    total += estimateCost(this.config.orchestrator, promptLen * 6, 700); // synthèse finale
+    const n = this.config.analysts.length;
+    for (let i = 0; i < n; i++) {
+      total += estimateCost(this.config.orchestrator, promptLen * 3, 400); // consolidation
+    }
+    for (let i = 0; i < n; i++) {
+      total += estimateCost(this.config.analysts[i], promptLen * 5, 400); // révision
+    }
+    total += estimateCost(this.config.consensus, promptLen * 6, 700); // consensus
+    total += estimateCost(this.config.synthesis, promptLen * 2, 500); // synthèse finale
     return total / 100;
   }
 }

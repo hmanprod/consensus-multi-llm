@@ -1,4 +1,4 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
 import { currentUserId } from "@/lib/user-context";
@@ -181,6 +181,28 @@ export const prismaStore: Store = {
       error,
       createdAt: r.createdAt.getTime(),
     };
+  },
+
+  async getRunProgress(runId) {
+    const r = await getPrisma().workflowRun.findUnique({
+      where: { id: runId },
+      select: { progressJson: true },
+    });
+    return (r?.progressJson as unknown as WorkflowProgress[] | undefined) ?? [];
+  },
+
+  async setRunProgress(runId, progress) {
+    await getPrisma().workflowRun.update({
+      where: { id: runId },
+      data: { progressJson: progress as unknown as object },
+    });
+  },
+
+  async clearRunProgress(runId) {
+    await getPrisma().workflowRun.update({
+      where: { id: runId },
+      data: { progressJson: [] as unknown as object },
+    });
   },
 
   async saveCredential(provider, encryptedKey, keyIv) {

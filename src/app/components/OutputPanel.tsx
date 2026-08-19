@@ -326,7 +326,7 @@ function SourceLink({ item }: { item: string }) {
 
 function SourcesView({ run }: { run: StoredRun }) {
   const r = run.result!;
-  const analyses = r.initialAnalyses;
+  const analyses = r.analyses;
   const withDossier = analyses.filter((a) => a.dossier);
   const sourceIds = (dossier: AnalystDossier) => new Map(dossier.sources.map((s) => [s.id, s]));
   const total = analyses.reduce((acc, a) => acc + (a.dossier?.sources.length ?? 0), 0);
@@ -440,21 +440,23 @@ function SourcesView({ run }: { run: StoredRun }) {
         );
       })}
 
-      {r.consolidated.dossier && r.consolidated.dossier.sources.length > 0 && (
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-medium text-ink">{r.consolidated.label}</span>
-            <span className="text-xs text-ink-faint">Sources consolidées (provenance préservée)</span>
-            <ModeBadge mode={r.consolidated.dossier.mode} />
+      {r.consolidations.map((c) =>
+        c.dossier && c.dossier.sources.length > 0 ? (
+          <div key={c.label}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-medium text-ink">{c.label}</span>
+              <span className="text-xs text-ink-faint">Sources consolidées (provenance préservée)</span>
+              <ModeBadge mode={c.dossier.mode} />
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {c.dossier.sources.map((s) => (
+                <li key={s.id}>
+                  <SourceLink item={s.url} />
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="mt-2 space-y-1.5">
-            {r.consolidated.dossier.sources.map((s) => (
-              <li key={s.id}>
-                <SourceLink item={s.url} />
-              </li>
-            ))}
-          </ul>
-        </div>
+        ) : null
       )}
     </div>
   );
@@ -476,37 +478,42 @@ function ComparisonView({ run }: { run: StoredRun }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {r.initialAnalyses.map((a, i) => {
-                const revised = r.revisedAnalyses[i];
-                return (
-                  <tr key={a.label}>
-                    <td className="px-3 py-2.5 align-top font-medium text-ink">{a.label}</td>
-                    <td className="px-3 py-2.5 align-top text-xs text-ink-secondary">
-                      {a.model.provider}/{a.model.model}
-                    </td>
-                    <td className="px-3 py-2.5 align-top text-xs leading-relaxed text-ink-secondary">
-                      <p className="mb-1 font-medium text-ink">Initiale</p>
-                      {excerpt(a.text)}
-                      {revised && (
-                        <p className="mt-2 border-t border-border pt-1.5 font-medium text-ink">Révision</p>
-                      )}
-                      {revised && excerpt(revised.text)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {r.analyses.map((a) => (
+                <tr key={a.label}>
+                  <td className="px-3 py-2.5 align-top font-medium text-ink">{a.label}</td>
+                  <td className="px-3 py-2.5 align-top text-xs text-ink-secondary">
+                    {a.model.provider}/{a.model.model}
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-xs leading-relaxed text-ink-secondary">
+                    {excerpt(a.text)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      <Accordion title={`Analyse A — orchestrateur (${r.analysisA.model.provider}/${r.analysisA.model.model})`}>
-        <MarkdownRenderer content={r.analysisA.text} />
-      </Accordion>
+      {r.consolidations.map((c) => (
+        <Accordion key={c.label} title={`Analyse consolidée ${c.label} — orchestrateur`}>
+          <MarkdownRenderer content={c.text} />
+        </Accordion>
+      ))}
 
-      <Accordion title={`Analyse consolidée ${r.consolidated.label} — orchestrateur`}>
-        <MarkdownRenderer content={r.consolidated.text} />
-      </Accordion>
+      {(r.revisions ?? []).map((rev) => (
+        <Accordion
+          key={rev.label}
+          title={`Révision ${rev.label} — analyste (${rev.model.provider}/${rev.model.model})`}
+        >
+          <MarkdownRenderer content={rev.text} />
+        </Accordion>
+      ))}
+
+      {r.consensus && (
+        <Accordion title={`Consensus — ${r.consensus.model.provider}/${r.consensus.model.model}`}>
+          <MarkdownRenderer content={r.consensus.text} />
+        </Accordion>
+      )}
     </div>
   );
 }
@@ -531,7 +538,7 @@ function Accordion({ title, children }: { title: React.ReactNode; children: Reac
 function MetricsView({ run }: { run: StoredRun }) {
   const r = run.result!;
   const models = new Set<string>();
-  for (const m of [r.analysisA, ...r.initialAnalyses, r.consolidated, ...r.revisedAnalyses, r.finalSynthesis]) {
+  for (const m of [...r.analyses, ...r.consolidations, ...(r.revisions ?? []), ...(r.consensus ? [r.consensus] : []), r.finalSynthesis]) {
     models.add(`${m.model.provider}/${m.model.model}`);
   }
   return (
@@ -545,8 +552,12 @@ function MetricsView({ run }: { run: StoredRun }) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
-          <span className="text-ink-secondary">Révisions des analystes</span>
-          <span className="font-medium text-ink">{r.revisedAnalyses.length}</span>
+          <span className="text-ink-secondary">Consolidations</span>
+          <span className="font-medium text-ink">{r.consolidations.length}</span>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
+          <span className="text-ink-secondary">Révisions</span>
+          <span className="font-medium text-ink">{r.revisions?.length ?? 0}</span>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
           <span className="text-ink-secondary">Statut</span>

@@ -5,7 +5,7 @@ import { getProfile } from "../src/config/profiles";
 import { MockAdapter } from "../src/gateway/adapters/mock";
 import { generate } from "../src/gateway";
 import { runWorkflow } from "../src/orchestrator";
-import { finalSynthesisPrompt } from "../src/orchestrator/prompts";
+import { consensusPrompt } from "../src/orchestrator/prompts";
 import { parseConsensusReport } from "../src/lib/consensus-report";
 import { sanitizeFinalResponse } from "../src/lib/sanitize";
 
@@ -48,23 +48,23 @@ function toMessages(p: { system: string; user: string }): ChatMessage[] {
 async function main() {
   const question = "Comparer deux stratégies marketing pour une PME";
 
-  // 1. MockAdapter + prompt de synthèse → Markdown structuré, sans JSON
+  // 1. MockAdapter + prompt de consensus → Markdown structuré, sans JSON
   const mock = new MockAdapter();
-  const prompt = finalSynthesisPrompt(question, [
+  const prompt = consensusPrompt(question, [
     { label: "ABC", text: "- point 1\n- point 2" },
-    { label: "ABCBC", text: "- point 3" },
+    { label: "B+ABC", text: "- point 3" },
   ]);
   const gen = await mock.generate({
     spec: { provider: "mock", model: "chatgpt-5.6" },
     messages: toMessages(prompt),
   });
   const mockText = gen.text;
-  assertClean(mockText, "MockAdapter synthèse");
-  assert.ok(mockText.startsWith("## Recommandation"), "MockAdapter : la synthèse doit commencer par « ## Recommandation »");
+  assertClean(mockText, "MockAdapter consensus");
+  assert.ok(mockText.startsWith("## Recommandation"), "MockAdapter : le consensus doit commencer par « ## Recommandation »");
   for (const s of REQUIRED_SECTIONS) {
     assert.ok(mockText.includes(s), `MockAdapter : section manquante « ${s} »`);
   }
-  assert.ok(mockText.includes(question), "MockAdapter : la question doit apparaître dans la synthèse");
+  assert.ok(mockText.includes(question), "MockAdapter : la question doit apparaître dans le consensus");
 
   // 2. sanitizeFinalResponse : nettoie les préfixes techniques
   const dirty = "[mock:chatgpt-5.6] Réponse de rôle arbitre final pour « x ».\n\nContexte reçu.\n\n## Recommandation\nOui.";
@@ -84,24 +84,31 @@ async function main() {
   assert.ok(report.limitations.length > 0, "parseConsensusReport : limites vides");
   assert.ok(report.nextSteps.length > 0, "parseConsensusReport : prochaine étape vide");
 
-  // 4. Workflow complet (mode mock) → snapshot du format final
+  // 4. Workflow complet (mode mock) → snapshot du consensus structuré + réponse finale
   const result = await runWorkflow(question, mockConfig(), { generate });
+  const consensusText = result.consensus.text;
+  assertClean(consensusText, "Workflow consensus");
+  assert.ok(consensusText.startsWith("## Recommandation"), "Workflow : le consensus doit commencer par « ## Recommandation »");
+  for (const s of REQUIRED_SECTIONS) {
+    assert.ok(consensusText.includes(s), `Workflow : section manquante « ${s} »`);
+  }
+  assert.ok(result.consensus.report, "Workflow : report consensus non peuplé");
+  assert.equal(
+    result.consensus.report!.recommendation.length > 0,
+    true,
+    "Workflow : recommandation vide dans le report consensus"
+  );
+  assert.ok(result.revisions.length > 0, "Workflow : aucune révision produite");
   const finalText = result.finalSynthesis.text;
   assertClean(finalText, "Workflow final");
-  assert.ok(finalText.startsWith("## Recommandation"), "Workflow : la synthèse doit commencer par « ## Recommandation »");
-  for (const s of REQUIRED_SECTIONS) {
-    assert.ok(finalText.includes(s), `Workflow : section manquante « ${s} »`);
-  }
-  assert.ok(result.finalSynthesis.report, "Workflow : report non peuplé");
-  assert.equal(
-    result.finalSynthesis.report!.recommendation.length > 0,
-    true,
-    "Workflow : recommandation vide dans le report"
-  );
+  assert.ok(result.consensus.model.provider === "mock", "Workflow : consensus doit utiliser le modèle consensus (mock)");
+  assert.ok(result.finalSynthesis.model.provider === "mock", "Workflow : synthèse doit utiliser le modèle synthesis (mock)");
 
   console.log("PASS — format de sortie final valide");
-  console.log("--- Snapshot (extrait) ---");
-  console.log(finalText.slice(0, 500));
+  console.log("--- Snapshot (extrait consensus) ---");
+  console.log(consensusText.slice(0, 500));
+  console.log("--- Snapshot (réponse finale) ---");
+  console.log(finalText.slice(0, 300));
 }
 
 main().catch((e) => {

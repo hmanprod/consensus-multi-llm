@@ -1,4 +1,4 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import type {
   StoredConfig,
@@ -11,6 +11,7 @@ import type {
 const conversations = new Map<string, StoredConversation>();
 const messages = new Map<string, StoredMessage[]>();
 const runs = new Map<string, StoredRun>();
+const runProgress = new Map<string, WorkflowProgress[]>();
 const credentials = new Map<string, { encryptedKey: string; keyIv: string }>();
 const configs = new Map<string, StoredConfig>();
 
@@ -106,6 +107,18 @@ export const memoryStore: Store = {
     run.status = "failed";
     run.error = error;
     return run;
+  },
+
+  async getRunProgress(runId) {
+    return runProgress.get(runId) ?? [];
+  },
+
+  async setRunProgress(runId, progress) {
+    runProgress.set(runId, progress);
+  },
+
+  async clearRunProgress(runId) {
+    runProgress.delete(runId);
   },
 
   async saveCredential(provider, encryptedKey, keyIv) {

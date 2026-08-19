@@ -1,19 +1,38 @@
 import type { WorkflowProgress } from "@/contracts/workflow";
+import { getStore } from "@/lib/store";
 
-const registry = new Map<string, WorkflowProgress[]>();
+const progressCache = new Map<string, WorkflowProgress[]>();
 
-export function recordProgress(runId: string, progress: WorkflowProgress) {
-  const list = registry.get(runId) ?? [];
+export async function recordProgress(runId: string, progress: WorkflowProgress) {
+  const list = progressCache.get(runId) ?? [];
   const index = list.findIndex((p) => p.step === progress.step);
   if (index >= 0) list[index] = progress;
   else list.push(progress);
-  registry.set(runId, list);
+  progressCache.set(runId, list);
+
+  try {
+    const store = await getStore();
+    await store.setRunProgress(runId, list);
+  } catch {
+    // Persistance best-effort : la progression reste disponible via le cache mémoire.
+  }
 }
 
-export function getProgress(runId: string): WorkflowProgress[] {
-  return registry.get(runId) ?? [];
+export async function getProgress(runId: string): Promise<WorkflowProgress[]> {
+  const cached = progressCache.get(runId);
+  if (cached) return cached;
+  try {
+    return (await getStore()).getRunProgress(runId);
+  } catch {
+    return [];
+  }
 }
 
-export function clearProgress(runId: string) {
-  registry.delete(runId);
+export async function clearProgress(runId: string) {
+  progressCache.delete(runId);
+  try {
+    await (await getStore()).clearRunProgress(runId);
+  } catch {
+    // Best-effort : le cache mémoire est déjà nettoyé.
+  }
 }
