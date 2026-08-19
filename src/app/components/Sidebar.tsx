@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Show, UserButton } from "@clerk/nextjs";
 import type { StoredConversation } from "@/lib/store";
+import { BUILD_LABEL } from "@/lib/build-info";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -268,6 +269,7 @@ function SidebarContent({
           Paramètres
         </SidebarLink>
       </div>
+      <p className="px-2 pt-3 text-[10px] text-ink-faint">{BUILD_LABEL}</p>
       </div>
     </>
   );
