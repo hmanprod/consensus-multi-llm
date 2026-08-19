@@ -4,8 +4,13 @@ import { authEnabled } from "@/lib/user-context";
 
 export default async function middleware(request: NextRequest, event: NextFetchEvent) {
   if (!authEnabled()) return NextResponse.next();
-  const { clerkMiddleware } = await import("@clerk/nextjs/server");
-  return clerkMiddleware()(request, event);
+  const { clerkMiddleware, createRouteMatcher } = await import("@clerk/nextjs/server");
+  const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+  return clerkMiddleware(async (auth, req) => {
+    if (!isPublicRoute(req)) {
+      await auth.protect();
+    }
+  })(request, event);
 }
 
 export const config = {
