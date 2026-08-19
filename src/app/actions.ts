@@ -5,6 +5,7 @@ import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
 import { getProfile, resolveAvailableSpecs } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
+import { friendlyMessage } from "@/gateway/errors";
 import { getStore } from "@/lib/store";
 import { clearProgress, getProgress, recordProgress } from "@/lib/progress";
 import { ensureUserSetup } from "@/lib/setup";
@@ -186,7 +187,7 @@ async function runWorkflowInBackground(
     await store.setRunResult(runId, result);
     await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, runId);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "erreur inconnue";
+    const message = friendlyMessage(err);
     try {
       const store = await getStore();
       await store.failRun(runId, message);

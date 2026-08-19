@@ -1,6 +1,7 @@
 import type { GenerationRequest, GenerationResult, ProviderAdapter } from "@/contracts/gateway";
 import type { ResearchEvidence, ResearchSource } from "@/contracts/research";
-import { httpJson, time, toUsage } from "./base";
+import { ProviderError } from "@/gateway/errors";
+import { assertText, httpJson, time, toUsage } from "./base";
 import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 
 const RESPONSES_BASE_URLS: Record<string, string> = {
@@ -41,6 +42,8 @@ interface ResponsesOutputItem {
 }
 
 interface ResponsesResponse {
+  status?: string;
+  error?: { message?: string; code?: string };
   output?: ResponsesOutputItem[];
   usage?: { input_tokens?: number; output_tokens?: number };
 }
@@ -63,7 +66,7 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
 
   async generate(req: GenerationRequest): Promise<GenerationResult> {
     const apiKey = this.apiKey;
-    if (!apiKey) throw new Error("missing_api_key");
+    if (!apiKey) throw new ProviderError("invalid_key", "missing_api_key");
 
     const body: Record<string, unknown> = {
       model: req.spec.model,
@@ -88,6 +91,13 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
         signal: req.signal,
       })
     );
+
+    if (value.error) {
+      throw new ProviderError("http", `provider_response_error: ${value.error.message ?? value.error.code ?? ""}`);
+    }
+    const failed =
+      value.status === "failed" || (value.output ?? []).some((item) => item.status === "failed");
+    if (failed) throw new ProviderError("server", "provider_response_failed");
 
     let text = "";
     const queries: string[] = [];
@@ -151,7 +161,7 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
       : undefined;
 
     return {
-      text,
+      text: assertText(text),
       usage: toUsage(value.usage?.input_tokens, value.usage?.output_tokens),
       latencyMs,
       raw: value,

@@ -1,6 +1,7 @@
 import type { GenerationRequest, GenerationResult, ProviderAdapter } from "@/contracts/gateway";
 import type { ResearchEvidence, ResearchSource } from "@/contracts/research";
-import { httpJson, time, toUsage } from "./base";
+import { ProviderError } from "@/gateway/errors";
+import { assertText, httpJson, time, toUsage } from "./base";
 import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 
 interface AnthropicCitation {
@@ -110,7 +111,7 @@ export class AnthropicAdapter implements ProviderAdapter {
 
   async generate(req: GenerationRequest): Promise<GenerationResult> {
     const apiKey = this.apiKey;
-    if (!apiKey) throw new Error("missing_api_key");
+    if (!apiKey) throw new ProviderError("invalid_key", "missing_api_key");
     const system = req.messages.find((m) => m.role === "system")?.content;
 
     const messages: AnthropicWireMessage[] = toAnthropicMessages(req.messages);
@@ -148,11 +149,13 @@ export class AnthropicAdapter implements ProviderAdapter {
       messages.push({ role: "assistant", content: value.content });
     }
 
-    const text = values
-      .flatMap((v) => v.content ?? [])
-      .filter((c) => c.type === "text")
-      .map((c) => c.text ?? "")
-      .join("");
+    const text = assertText(
+      values
+        .flatMap((v) => v.content ?? [])
+        .filter((c) => c.type === "text")
+        .map((c) => c.text ?? "")
+        .join("")
+    );
 
     let research: GenerationResult["research"];
     if (req.search?.enabled) {

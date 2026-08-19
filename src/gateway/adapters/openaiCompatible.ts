@@ -1,6 +1,7 @@
 import type { GenerationRequest, GenerationResult, ProviderAdapter, Usage } from "@/contracts/gateway";
 import type { ResearchEvidence, ResearchSource } from "@/contracts/research";
-import { httpJson, time, toUsage } from "./base";
+import { ProviderError } from "@/gateway/errors";
+import { assertText, httpJson, time, toUsage } from "./base";
 import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 
 interface ChatCompletionsResponse {
@@ -85,7 +86,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
 
   async generate(req: GenerationRequest): Promise<GenerationResult> {
     const apiKey = this.apiKey;
-    if (!apiKey) throw new Error("missing_api_key");
+    if (!apiKey) throw new ProviderError("invalid_key", "missing_api_key");
     if (this.provider === "kimi" && req.search?.enabled) {
       return this.generateWithKimiSearch(req, apiKey);
     }
@@ -103,7 +104,7 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
         signal: req.signal,
       })
     );
-    const text = value.choices?.[0]?.message?.content ?? "";
+    const text = assertText(value.choices?.[0]?.message?.content);
     return {
       text,
       usage: toUsage(value.usage?.prompt_tokens, value.usage?.completion_tokens),
@@ -163,6 +164,8 @@ export class OpenAICompatibleAdapter implements ProviderAdapter {
         break;
       }
     }
+
+    text = assertText(text);
 
     const evidence: ResearchEvidence[] = evidenceFromSnippets(sources);
     const research = toResearchResult("native", { queries, sources, evidence }, req.search);

@@ -1,6 +1,7 @@
 import type { GenerationRequest, GenerationResult, ProviderAdapter } from "@/contracts/gateway";
 import type { ResearchEvidence, ResearchSource } from "@/contracts/research";
-import { httpJson, time, toUsage } from "./base";
+import { ProviderError } from "@/gateway/errors";
+import { assertText, httpJson, time, toUsage } from "./base";
 import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 
 interface OpenRouterAnnotation {
@@ -29,7 +30,7 @@ export class OpenRouterAdapter implements ProviderAdapter {
   }
 
   async generate(req: GenerationRequest): Promise<GenerationResult> {
-    if (!this.apiKey) throw new Error("missing_api_key");
+    if (!this.apiKey) throw new ProviderError("invalid_key", "missing_api_key");
     const body: Record<string, unknown> = {
       model: req.spec.model,
       messages: req.messages,
@@ -61,7 +62,7 @@ export class OpenRouterAdapter implements ProviderAdapter {
         signal: req.signal,
       })
     );
-    const text = value.choices?.[0]?.message?.content ?? "";
+    const text = assertText(value.choices?.[0]?.message?.content);
 
     let research: GenerationResult["research"];
     if (req.search?.enabled) {

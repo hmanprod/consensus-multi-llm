@@ -10,6 +10,7 @@ import type {
 import type { ChatMessage, GenerationRequest, GenerationResult, ModelSpec, Usage } from "@/contracts/gateway";
 import type { AnalystDossier, ResearchSource } from "@/contracts/research";
 import { estimateCost, tokensToUsd } from "@/gateway/cost";
+import { friendlyMessage } from "@/gateway/errors";
 import { parseConsensusReport } from "@/lib/consensus-report";
 import { sanitizeFinalResponse } from "@/lib/sanitize";
 import { runAnalystAgent } from "@/research/analyst-agent";
@@ -36,7 +37,7 @@ function roughTokens(text: string): number {
 }
 
 function message(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  return friendlyMessage(err);
 }
 
 const ANALYST_STAGGER_MS = 2000;

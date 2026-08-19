@@ -1,6 +1,7 @@
 import type { GenerationRequest, GenerationResult, ProviderAdapter } from "@/contracts/gateway";
 import type { ResearchEvidence, ResearchSource } from "@/contracts/research";
-import { httpJson, time, toUsage } from "./base";
+import { ProviderError } from "@/gateway/errors";
+import { assertText, httpJson, time, toUsage } from "./base";
 import { toResearchResult } from "./research-utils";
 
 interface GeminiResponse {
@@ -75,7 +76,7 @@ export class GeminiAdapter implements ProviderAdapter {
   }
 
   async generate(req: GenerationRequest): Promise<GenerationResult> {
-    if (!this.apiKey) throw new Error("missing_api_key");
+    if (!this.apiKey) throw new ProviderError("invalid_key", "missing_api_key");
     const model = req.spec.model.includes("/") ? req.spec.model.split("/").pop() : req.spec.model;
     const body: Record<string, unknown> = {
       contents: toGeminiMessages(req.messages),
@@ -97,9 +98,11 @@ export class GeminiAdapter implements ProviderAdapter {
         signal: req.signal,
       })
     );
-    const text = (value.candidates?.[0]?.content?.parts ?? [])
-      .map((p) => p.text ?? "")
-      .join("");
+    const text = assertText(
+      (value.candidates?.[0]?.content?.parts ?? [])
+        .map((p) => p.text ?? "")
+        .join("")
+    );
 
     let research: GenerationResult["research"];
     if (req.search?.enabled) {
