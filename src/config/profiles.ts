@@ -51,7 +51,7 @@ const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
     synthesis: { provider: "openai", model: "chatgpt-5.6" },
     maxRounds: 0,
     maxBudgetCents: 60,
-    maxTokensPerCall: 2000,
+    maxTokensPerCall: 2048,
     timeoutMs: 120_000,
     minAgreementScore: 70,
   },

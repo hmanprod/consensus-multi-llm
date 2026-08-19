@@ -258,7 +258,7 @@ export async function testProviderConnection(input: { provider: string }) {
     const provider = PROVIDER_SCHEMA.parse(input.provider);
     if (provider === "mock") return { ok: true, detail: "Provider mock (démo) toujours disponible." };
     await bindStoredKeys();
-    const adapter = getAdapter({ provider, model: "x" });
+    const adapter = await getAdapter({ provider, model: "x" });
     if (!adapter.validateCredentials) return { ok: false, detail: "validateCredentials_non_supported" };
     const ok = await adapter.validateCredentials();
     return { ok, detail: ok ? "Connexion valide." : "Clé refusée par le fournisseur." };

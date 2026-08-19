@@ -1,5 +1,9 @@
 import "dotenv/config";
+import dotenv from "dotenv";
+import { existsSync } from "node:fs";
 import { defineConfig } from "prisma/config";
+
+if (existsSync(".env.local")) dotenv.config({ path: ".env.local", override: true });
 
 if (process.env.CI && !process.env.DATABASE_URL) {
   throw new Error(

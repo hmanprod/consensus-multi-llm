@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ActiveConfig } from "@/contracts/workflow";
 import type { StoredConfig } from "@/lib/store";
 import { configRefKey, parseConfigRefKey } from "@/config/profiles";
-import { SendIcon, SettingsIcon, StopIcon } from "./ui/icons";
+import { SendIcon, SettingsIcon, SpinnerIcon } from "./ui/icons";
 
 export function Composer({
   question,
@@ -68,7 +68,7 @@ export function Composer({
             title="Arrêter"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
           >
-            <StopIcon size={14} />
+            <SpinnerIcon size={16} className="animate-spin" />
           </button>
         ) : (
           <button

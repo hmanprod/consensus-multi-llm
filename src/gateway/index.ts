@@ -53,23 +53,24 @@ export function getApiKey(provider: string): Promise<string | null> {
   return context.getApiKey(provider);
 }
 
-export function getAdapter(spec: ModelSpec, opts?: { search?: boolean }): ProviderAdapter {
+export async function getAdapter(spec: ModelSpec, opts?: { search?: boolean }): Promise<ProviderAdapter> {
+  const apiKey = await context.getApiKey(spec.provider);
   switch (spec.provider) {
     case "anthropic":
-      return new AnthropicAdapter(DEFAULT_API_KEYS.anthropic ?? null);
+      return new AnthropicAdapter(apiKey);
     case "gemini":
-      return new GeminiAdapter(DEFAULT_API_KEYS.gemini ?? null);
+      return new GeminiAdapter(apiKey);
     case "openrouter":
-      return new OpenRouterAdapter(DEFAULT_API_KEYS.openrouter ?? null);
+      return new OpenRouterAdapter(apiKey);
     case "mock":
       return new MockAdapter();
     default: {
       if (opts?.search && RESPONSES_PROVIDERS.has(spec.provider)) {
-        return new OpenAIResponsesAdapter(spec.provider, DEFAULT_API_KEYS[spec.provider] ?? null);
+        return new OpenAIResponsesAdapter(spec.provider, apiKey);
       }
       const baseUrl = OPENAI_COMPATIBLE_BASE_URLS[spec.provider];
       if (baseUrl) {
-        return new OpenAICompatibleAdapter(spec.provider, baseUrl, DEFAULT_API_KEYS[spec.provider] ?? null);
+        return new OpenAICompatibleAdapter(spec.provider, baseUrl, apiKey);
       }
       throw new Error(`unknown_provider: ${spec.provider}`);
     }
@@ -77,7 +78,7 @@ export function getAdapter(spec: ModelSpec, opts?: { search?: boolean }): Provid
 }
 
 export async function generate(req: GenerationRequest): Promise<GenerationResult> {
-  const adapter = getAdapter(req.spec, { search: req.search?.enabled });
+  const adapter = await getAdapter(req.spec, { search: req.search?.enabled });
   return adapter.generate(req);
 }
 

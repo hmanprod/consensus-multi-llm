@@ -10,18 +10,27 @@ import type {
   Store,
 } from "./types";
 
-async function ensureUser() {
+const userEnsurers = new Map<string, Promise<{ userId: string; workspaceId: string }>>();
+
+function ensureUser() {
   const clerkId = currentUserId();
-  const prisma = getPrisma();
-  let user = await prisma.user.findUnique({ where: { clerkId } });
-  if (!user) {
-    user = await prisma.user.create({ data: { clerkId, email: `${clerkId}@consensus.local` } });
-  }
-  let workspace = await prisma.workspace.findFirst({ where: { ownerId: user.id } });
-  if (!workspace) {
-    workspace = await prisma.workspace.create({ data: { name: "Défaut", ownerId: user.id } });
-  }
-  return { userId: user.id, workspaceId: workspace.id };
+  const pending = userEnsurers.get(clerkId);
+  if (pending) return pending;
+  const promise = (async () => {
+    const prisma = getPrisma();
+    const user = await prisma.user.upsert({
+      where: { clerkId },
+      create: { clerkId, email: `${clerkId}@consensus.local` },
+      update: {},
+    });
+    let workspace = await prisma.workspace.findFirst({ where: { ownerId: user.id } });
+    if (!workspace) {
+      workspace = await prisma.workspace.create({ data: { name: "Défaut", ownerId: user.id } });
+    }
+    return { userId: user.id, workspaceId: workspace.id };
+  })();
+  userEnsurers.set(clerkId, promise);
+  return promise.finally(() => userEnsurers.delete(clerkId));
 }
 
 export const prismaStore: Store = {
