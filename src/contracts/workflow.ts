@@ -58,7 +58,7 @@ export type WorkflowOutputKind =
   | "consensus"
   | "final-synthesis";
 
-export type WorkflowProgressStatus = "pending" | "searching" | "writing" | "running" | "done" | "error";
+export type WorkflowProgressStatus = "pending" | "searching" | "writing" | "running" | "done" | "error" | "skipped";
 
 export interface WorkflowProgress {
   step: WorkflowStep;
@@ -66,6 +66,7 @@ export interface WorkflowProgress {
   label: string;
   detail?: string;
   durationMs?: number;
+  content?: string;
 }
 
 export interface TimelineEntry {

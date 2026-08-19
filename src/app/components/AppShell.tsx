@@ -59,6 +59,7 @@ export function AppShell({
   const [runKey, setRunKey] = useState(0);
   const [activeProgress, setActiveProgress] = useState<WorkflowProgress[]>([]);
   const [activeStartedAt, setActiveStartedAt] = useState(0);
+  const [liveDone, setLiveDone] = useState(false);
   const abortRef = useRef(false);
   const currentRunIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,7 +106,7 @@ export function AppShell({
       const el = scrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }
-  }, [messages, busy]);
+  }, [messages, busy, activeProgress]);
 
   function handleScroll() {
     const el = scrollRef.current;
@@ -138,6 +139,8 @@ export function AppShell({
     setError(null);
     setOutput(null);
     setMobileNavOpen(false);
+    setActiveProgress([]);
+    setLiveDone(false);
     stickToBottom.current = true;
     await refreshConversation(id);
   }
@@ -149,6 +152,8 @@ export function AppShell({
     setError(null);
     setOutput(null);
     setMobileNavOpen(false);
+    setActiveProgress([]);
+    setLiveDone(false);
     stickToBottom.current = true;
   }
 
@@ -161,6 +166,7 @@ export function AppShell({
     setRunKey((k) => k + 1);
     setActiveStartedAt(Date.now());
     setActiveProgress([]);
+    setLiveDone(false);
     currentRunIdRef.current = null;
     let pollId: ReturnType<typeof setInterval> | null = null;
     try {
@@ -190,8 +196,7 @@ export function AppShell({
           if (snap.status !== "running") {
             stopPolling();
             setBusy(false);
-            setActiveProgress([]);
-            await refreshConversation(res.conversationId);
+            setLiveDone(true);
             setConversations(await listAllConversations());
             setQuestion("");
           }
@@ -211,7 +216,7 @@ export function AppShell({
   function stopAnalysis() {
     abortRef.current = true;
     setBusy(false);
-    setActiveProgress([]);
+    setLiveDone(true);
     setQuestion("");
     showToast("Arrêt demandé — le traitement peut continuer côté serveur.", "info");
   }
@@ -383,12 +388,13 @@ export function AppShell({
                   </article>
                 )
               )}
-              {busy && (
+              {(busy || liveDone) && activeProgress.length > 0 && (
                 <ConversationWorkflow
                   key={runKey}
                   progress={activeProgress}
                   startedAt={activeStartedAt}
                   analystCount={activeConfig.analysts.length + 1}
+                  running={busy}
                   onStop={stopAnalysis}
                 />
               )}

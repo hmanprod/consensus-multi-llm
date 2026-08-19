@@ -92,3 +92,48 @@ export function workflowSteps(analystCount: number): WorkflowStepItem[] {
 export function formatDuration(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`;
 }
+
+/**
+ * Construit un item d'étape à partir d'une clé dynamique (ex. "ABD", "B+AB").
+ * Le groupe et le libellé sont déduits de la forme de la clé.
+ */
+export function dynamicStepItem(key: string): WorkflowStepItem {
+  const step = key as WorkflowStep;
+  if (step === "S" || step === "F") {
+    return {
+      key: step,
+      label: step === "S" ? "Consensus" : "Synthèse finale",
+      description: step === "S"
+        ? "Compare la consolidation et les révisions pour dégager un accord commun."
+        : "Réponse finale construite à partir du consensus.",
+      kind: step === "S" ? "consensus" : "final-synthesis",
+      group: step === "S" ? "consensus" : "synthesis",
+    };
+  }
+  if (key.length === 1) {
+    return {
+      key: step,
+      label: `Analyse ${key}`,
+      description: "Analyse indépendante de la question.",
+      kind: "independent-analysis",
+      group: "independent",
+    };
+  }
+  if (key.includes("+")) {
+    const [letter, ...rest] = key.split("+");
+    return {
+      key: step,
+      label: `Révision ${letter} + ${rest.join("+")}`,
+      description: "Révise sa propre analyse en intégrant la consolidation.",
+      kind: "revision",
+      group: "revision",
+    };
+  }
+  return {
+    key: step,
+    label: `Analyse ${key}`,
+    description: "Confrontation des analyses précédentes.",
+    kind: "combined-analysis",
+    group: "consolidation",
+  };
+}

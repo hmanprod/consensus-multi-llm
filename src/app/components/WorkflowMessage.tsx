@@ -9,7 +9,7 @@ import { Button } from "./ui/Button";
 import { Skeleton } from "./ui/Skeleton";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { WorkflowStepCard } from "./WorkflowStepCard";
-import { formatDuration, workflowSteps } from "./workflow-steps";
+import { dynamicStepItem, formatDuration } from "./workflow-steps";
 import {
   AlertIcon,
   CheckIcon,
@@ -73,11 +73,13 @@ export function WorkflowMessage({
   const isError = content.startsWith("Une erreur est survenue");
 
   const stepItems = useMemo(() => {
-    const analystCount = run?.result?.analyses.length ?? 0;
-    if (analystCount === 0) return [];
-    return workflowSteps(analystCount).filter(
-      (s) => s.group === "independent" || s.group === "consolidation" || s.group === "revision"
-    );
+    const r = run?.result;
+    if (!r || !Array.isArray(r.analyses) || r.analyses.length === 0) return [];
+    return [
+      ...r.analyses.map((a) => dynamicStepItem(a.label)),
+      ...r.consolidations.map((c) => dynamicStepItem(c.label)),
+      ...r.revisions.map((rev) => dynamicStepItem(rev.label)),
+    ];
   }, [run]);
 
   const consensusEntry = run?.result?.timeline.find((t) => t.step === "S");

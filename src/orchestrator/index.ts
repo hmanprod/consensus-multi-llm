@@ -78,6 +78,11 @@ class Orchestrator {
     return String.fromCharCode(66 + index); // B, C, ...
   }
 
+  private isValidAnalysis(a: AnalysisOutput): boolean {
+    const text = (a?.text ?? "").trim();
+    return text.length > 0 && !text.startsWith("[");
+  }
+
   private account(spec: ModelSpec, usage: Usage, latencyMs: number) {
     this.totalCostCents += tokensToUsd(spec, usage) * 100;
     this.totalTokens += usage.promptTokens + usage.completionTokens;
@@ -149,7 +154,7 @@ class Orchestrator {
       );
       this.account(spec, res.usage, res.latencyMs);
       this.tick(step, `Analyse ${label} (${role})`, "done", Date.now() - t, `${spec.provider}/${spec.model} · ${res.dossier.mode}`);
-      this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t });
+      this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t, content: res.dossier.analysis });
       if (index !== undefined) this.lastAnalystTexts[index] = res.dossier.analysis;
       return {
         label,
@@ -206,6 +211,7 @@ class Orchestrator {
       label: `Révision ${label}`,
       durationMs: Date.now() - t,
       detail: res.error,
+      content: res.error ? undefined : res.text,
     });
     return {
       label,
@@ -276,6 +282,12 @@ class Orchestrator {
     );
     const analyses = [analysisA, ...analystAnalyses];
 
+    // On ne consolide/révise que les analystes dont l'analyse a abouti.
+    const validAnalystIndices = analystAnalyses
+      .map((a, i) => [a, i] as const)
+      .filter(([a]) => this.isValidAnalysis(a))
+      .map(([, i]) => i);
+
     // AB, ABC — confrontations successives des analyses (séquentiel)
     const consolidations: AnalysisOutput[] = [];
     let currentText = analysisA.text;
@@ -285,6 +297,12 @@ class Orchestrator {
       const newLabel = this.analystLabel(i);
       const nextLabel = currentLabel + newLabel;
       const step = nextLabel as WorkflowStep;
+      if (!validAnalystIndices.includes(i)) {
+        const skipDetail = "Analyste en échec — analyse ignorée.";
+        this.tick(step, `Analyse ${nextLabel} (orchestrateur)`, "skipped", 0, skipDetail);
+        this.emit({ step, status: "skipped", label: `Analyse ${nextLabel}`, detail: skipDetail });
+        continue;
+      }
       this.emit({ step, status: "writing", label: `Analyse ${nextLabel}` });
       const tC = Date.now();
       const newRefs = this.toSourceRefs(analystAnalyses[i].dossier?.sources);
@@ -318,21 +336,30 @@ class Orchestrator {
         label: `Analyse ${nextLabel}`,
         durationMs: Date.now() - tC,
         detail: res.error,
+        content: res.error ? undefined : res.text,
       });
       currentText = res.text;
       currentLabel = nextLabel;
       currentDossier = merged.dossier;
     }
 
-    // B+ABC, C+ABC — révisions des analystes (parallèle, démarrage décalé)
+    // B+ABD, C+ABC — révisions des analystes (parallèle, démarrage décalé)
     const fullLabel = consolidations.length > 0 ? consolidations[consolidations.length - 1].label : "A";
     const fullText = consolidations.length > 0 ? consolidations[consolidations.length - 1].text : analysisA.text;
     const revisions = await Promise.all(
-      this.config.analysts.map(async (spec, i) => {
-        if (i > 0) await sleep(ANALYST_STAGGER_MS * i);
-        return this.runRevision(i, spec, fullLabel, fullText);
+      validAnalystIndices.map((i, pos) => {
+        const launch = () => this.runRevision(i, this.config.analysts[i], fullLabel, fullText);
+        return pos > 0 ? sleep(ANALYST_STAGGER_MS * pos).then(launch) : launch();
       })
     );
+    for (let i = 0; i < analystCount; i++) {
+      if (validAnalystIndices.includes(i)) continue;
+      const letter = this.analystLabel(i);
+      const step = `${letter}+${fullLabel}` as WorkflowStep;
+      const skipDetail = "Analyste en échec — révision ignorée.";
+      this.tick(step, `Révision ${letter}+${fullLabel} (analyste)`, "skipped", 0, skipDetail);
+      this.emit({ step, status: "skipped", label: `Révision ${letter} + ${fullLabel}`, detail: skipDetail });
+    }
 
     // S — Consensus (config.consensus)
     const consensusInput = [
@@ -361,6 +388,7 @@ class Orchestrator {
       label: "Consensus",
       durationMs: Date.now() - tS,
       detail: cRes.error,
+      content: cRes.error ? undefined : consensusText,
     });
 
     // F — Synthèse finale (config.synthesis)
@@ -385,6 +413,7 @@ class Orchestrator {
       label: "Synthèse finale",
       durationMs: Date.now() - tF,
       detail: fRes.error,
+      content: fRes.error ? undefined : finalText,
     });
 
     return {
