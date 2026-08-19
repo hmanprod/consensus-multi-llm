@@ -7,7 +7,7 @@ import { OpenAIResponsesAdapter } from "./adapters/openaiResponses";
 import { OpenRouterAdapter } from "./adapters/openrouter";
 import { OPENAI_COMPATIBLE_BASE_URLS } from "@/config/models";
 
-const RESPONSES_PROVIDERS = new Set(["openai", "meta", "xai"]);
+const RESPONSES_PROVIDERS = new Set(["openai", "xai", "zenmux"]);
 
 const DEFAULT_API_KEYS: Record<string, string | undefined> = {
   openai: process.env.OPENAI_API_KEY,

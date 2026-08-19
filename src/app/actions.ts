@@ -10,6 +10,7 @@ import { clearProgress, getProgress, recordProgress } from "@/lib/progress";
 import { ensureUserSetup } from "@/lib/setup";
 import { encryptSecret } from "@/lib/crypto";
 import { getAuthUserId, userStorage } from "@/lib/user-context";
+import { NATIVE_SEARCH_PROVIDERS } from "@/research/gateway";
 import type { KnownProvider } from "@/gateway";
 
 const PROVIDER_SCHEMA = z.enum(KNOWN_PROVIDERS as unknown as [string, ...string[]]);
@@ -302,6 +303,7 @@ export async function listProvidersStatus() {
         updatedAt: cred?.updatedAt ?? null,
         source: p === "mock" ? "built-in" : configured.has(p) ? "stored" : envKey ? "env" : null,
         needed: neededSet.has(p),
+        webSearch: NATIVE_SEARCH_PROVIDERS.has(p),
       };
     });
   });

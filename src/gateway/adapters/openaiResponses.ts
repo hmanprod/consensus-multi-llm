@@ -5,11 +5,14 @@ import { sourceTypeFromUrl, toResearchResult, uid } from "./research-utils";
 
 const RESPONSES_BASE_URLS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
-  meta: "https://api.meta.ai/v1",
   xai: "https://api.x.ai/v1",
+  zenmux: "https://zenmux.ai/api/v1",
 };
 
-const INCLUDE_RESULTS = new Set(["openai", "meta"]);
+const INCLUDE_BY_PROVIDER: Record<string, string[]> = {
+  openai: ["web_search_call.results", "web_search_call.action.sources"],
+  zenmux: ["web_search_call.action.sources"],
+};
 
 interface ResponsesAnnotation {
   type?: string;
@@ -28,7 +31,11 @@ interface ResponsesContentPart {
 interface ResponsesOutputItem {
   type?: string;
   status?: string;
-  action?: { query?: string; queries?: string[] };
+  action?: {
+    query?: string;
+    queries?: string[];
+    sources?: Array<{ type?: string; url?: string }>;
+  };
   results?: Array<{ type?: string; title?: string; url?: string; snippet?: string }>;
   content?: ResponsesContentPart[];
 }
@@ -64,7 +71,9 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
     };
     if (req.search?.enabled) {
       body.tools = [{ type: "web_search" }];
-      if (INCLUDE_RESULTS.has(this.provider)) body.include = ["web_search_call.results"];
+      if (this.provider === "zenmux") body.max_tool_calls = req.search.maxSearches;
+      const include = INCLUDE_BY_PROVIDER[this.provider];
+      if (include) body.include = include;
     }
     if (req.maxTokens) body.max_output_tokens = req.maxTokens;
     if (req.temperature != null && this.provider === "openai") body.temperature = req.temperature;
@@ -111,6 +120,9 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
         for (const q of item.action?.queries ?? []) queries.push(q);
         for (const r of item.results ?? []) {
           if (r.url) ensureSource(r.url, r.title ?? "", r.snippet ?? "");
+        }
+        for (const s of item.action?.sources ?? []) {
+          if (s.url) ensureSource(s.url, "", "");
         }
       }
       if (item.type === "message") {

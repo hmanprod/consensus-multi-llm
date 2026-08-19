@@ -14,15 +14,23 @@ interface AnthropicContentBlock {
   type: string;
   text?: string;
   citations?: AnthropicCitation[];
-  content?: Array<{ type?: string; url?: string; title?: string }>;
+  name?: string;
+  input?: { query?: string };
+  content?: Array<{ type?: string; url?: string; title?: string; error_code?: string }>;
 }
 
 interface AnthropicResponse {
   content?: AnthropicContentBlock[];
+  stop_reason?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-function toAnthropicMessages(messages: GenerationRequest["messages"]) {
+type AnthropicWireMessage = {
+  role: "user" | "assistant";
+  content: string | AnthropicContentBlock[];
+};
+
+function toAnthropicMessages(messages: GenerationRequest["messages"]): AnthropicWireMessage[] {
   return messages
     .filter((m) => m.role !== "system")
     .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
@@ -31,10 +39,17 @@ function toAnthropicMessages(messages: GenerationRequest["messages"]) {
 function parseSearchContent(
   value: AnthropicResponse,
   provider: string
-): { sources: ResearchSource[]; evidence: ResearchEvidence[] } {
+): {
+  queries: string[];
+  sources: ResearchSource[];
+  evidence: ResearchEvidence[];
+  errors: string[];
+} {
+  const queries: string[] = [];
   const sources: ResearchSource[] = [];
   const sourceIdByUrl = new Map<string, string>();
   const evidence: ResearchEvidence[] = [];
+  const errors: string[] = [];
 
   const ensureSource = (url: string, title: string, cited: string): string | null => {
     if (!url) return null;
@@ -56,8 +71,17 @@ function parseSearchContent(
   };
 
   for (const block of value.content ?? []) {
+    if (block.type === "server_tool_use" && block.name === "web_search" && block.input?.query) {
+      queries.push(block.input.query);
+    }
+  }
+  for (const block of value.content ?? []) {
     if (block.type === "web_search_tool_result") {
       for (const part of block.content ?? []) {
+        if (part.type === "web_search_tool_result_error" && part.error_code) {
+          errors.push(`web_search_error:${part.error_code}`);
+          continue;
+        }
         if (part.url) ensureSource(part.url, part.title ?? "", "");
       }
     }
@@ -73,7 +97,7 @@ function parseSearchContent(
     }
   }
 
-  return { sources, evidence };
+  return { queries, sources, evidence, errors };
 }
 
 export class AnthropicAdapter implements ProviderAdapter {
@@ -89,43 +113,74 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (!apiKey) throw new Error("missing_api_key");
     const system = req.messages.find((m) => m.role === "system")?.content;
 
-    const body: Record<string, unknown> = {
-      model: req.spec.model,
-      messages: toAnthropicMessages(req.messages),
-      max_tokens: req.maxTokens ?? 2048,
-    };
-    if (system) body.system = system;
-    if (req.search?.enabled) {
-      body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: req.search.maxSearches }];
+    const messages: AnthropicWireMessage[] = toAnthropicMessages(req.messages);
+    const started = Date.now();
+    const tool = req.search?.enabled
+      ? { type: "web_search_20250305", name: "web_search", max_uses: req.search.maxSearches }
+      : undefined;
+
+    const values: AnthropicResponse[] = [];
+    const maxIterations = 4;
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      const timeoutMs = Math.max(1, (req.timeoutMs ?? 60_000) - (Date.now() - started));
+      const body: Record<string, unknown> = {
+        model: req.spec.model,
+        messages,
+        max_tokens: req.maxTokens ?? 2048,
+      };
+      if (system) body.system = system;
+      if (tool) body.tools = [tool];
+
+      const { value } = await time(async () =>
+        httpJson<AnthropicResponse>({
+          url: "https://api.anthropic.com/v1/messages",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body,
+          timeoutMs,
+          signal: req.signal,
+        })
+      );
+      values.push(value);
+      if (value.stop_reason !== "pause_turn" || !value.content?.length) break;
+      messages.push({ role: "assistant", content: value.content });
     }
 
-    const { value, latencyMs } = await time(async () =>
-      httpJson<AnthropicResponse>({
-        url: "https://api.anthropic.com/v1/messages",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body,
-        timeoutMs: req.timeoutMs,
-        signal: req.signal,
-      })
-    );
-
-    const text = (value.content ?? [])
+    const text = values
+      .flatMap((v) => v.content ?? [])
       .filter((c) => c.type === "text")
       .map((c) => c.text ?? "")
       .join("");
 
-    const research = req.search?.enabled
-      ? toResearchResult("native", parseSearchContent(value, this.provider), req.search)
-      : undefined;
+    let research: GenerationResult["research"];
+    if (req.search?.enabled) {
+      const queries: string[] = [];
+      const sources: ResearchSource[] = [];
+      const evidence: ResearchEvidence[] = [];
+      const errors: string[] = [];
+      const seenUrls = new Set<string>();
+      for (const v of values) {
+        const parsed = parseSearchContent(v, this.provider);
+        for (const q of parsed.queries) queries.push(q);
+        for (const s of parsed.sources) {
+          if (seenUrls.has(s.url)) continue;
+          seenUrls.add(s.url);
+          sources.push(s);
+        }
+        evidence.push(...parsed.evidence);
+        errors.push(...parsed.errors);
+      }
+      research = toResearchResult("native", { queries, sources, evidence, errors }, req.search);
+    }
 
+    const last = values[values.length - 1];
     return {
       text,
-      usage: toUsage(value.usage?.input_tokens, value.usage?.output_tokens),
-      latencyMs,
-      raw: value,
+      usage: toUsage(last?.usage?.input_tokens, last?.usage?.output_tokens),
+      latencyMs: Date.now() - started,
+      raw: values.length === 1 ? values[0] : values,
       research,
     };
   }

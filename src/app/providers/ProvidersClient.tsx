@@ -5,7 +5,7 @@ import { listProvidersStatus, saveApiKey, testProviderConnection } from "@/app/a
 import { MODELS_BY_PROVIDER, PROVIDER_LABELS, PROVIDER_PLATFORMS } from "@/config/models";
 import { Badge } from "@/app/components/ui/Badge";
 import { Button } from "@/app/components/ui/Button";
-import { CheckIcon, ChevronDownIcon, LinkIcon } from "@/app/components/ui/icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, LinkIcon, SearchIcon } from "@/app/components/ui/icons";
 
 export type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 
@@ -134,6 +134,23 @@ export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
   );
 }
 
+function WebSearchBadge({ webSearch }: { webSearch: boolean }) {
+  if (webSearch) {
+    return (
+      <Badge tone="accent">
+        <SearchIcon size={11} />
+        Recherche web
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone="neutral">
+      <AlertIcon size={11} />
+      Sans recherche native
+    </Badge>
+  );
+}
+
 function ConfiguredProvider({
   status,
   busy,
@@ -157,6 +174,7 @@ function ConfiguredProvider({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate font-medium text-ink">{PROVIDER_LABELS[status.provider]}</span>
+          <WebSearchBadge webSearch={status.webSearch} />
           <Badge tone="success">
             <CheckIcon size={11} />
             Configuré
@@ -225,6 +243,7 @@ function AvailableProvider({
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-sm font-medium text-ink">{PROVIDER_LABELS[status.provider]}</span>
+          <WebSearchBadge webSearch={status.webSearch} />
           {needsAction ? (
             <Badge tone="warning">Requis · à configurer</Badge>
           ) : (

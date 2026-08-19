@@ -30,6 +30,7 @@ export function WorkflowStepCard({
   const isRevision = step.kind === "revision";
   const isRevised = isRevision || step.revised;
   const isConsensus = step.kind === "consensus";
+  const noWebSearch = step.group === "independent" && output?.dossier?.mode === "disabled";
 
   async function copy() {
     if (!output) return;
@@ -78,6 +79,12 @@ export function WorkflowStepCard({
                 <span className="inline-flex items-center gap-1 text-xs font-normal text-danger">
                   <AlertIcon size={12} />
                   Erreur
+                </span>
+              )}
+              {noWebSearch && (
+                <span className="inline-flex items-center gap-1 text-xs font-normal text-warning">
+                  <AlertIcon size={12} />
+                  Sans recherche web
                 </span>
               )}
             </span>

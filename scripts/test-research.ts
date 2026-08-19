@@ -113,6 +113,9 @@ async function main() {
   check(researchModeFor({ provider: "gemini", model: "gemini-3.7-flash" }, true) === "native", "mode native si clé présente");
   check(researchModeFor({ provider: "gemini", model: "gemini-3.7-flash" }, false) === "disabled", "mode disabled sans clé");
   check(researchModeFor({ provider: "deepseek", model: "deepseek-v4" }, true) === "disabled", "mode disabled sans outil natif");
+  check(researchModeFor({ provider: "meta", model: "muse-spark-1.2" }, true) === "disabled", "mode disabled pour meta (recherche native non documentée)");
+  check(researchModeFor({ provider: "openrouter", model: "auto" }, true) === "native", "mode native pour openrouter si clé présente");
+  check(researchModeFor({ provider: "zenmux", model: "auto" }, true) === "native", "mode native pour zenmux si clé présente");
 
   const policy: ResearchPolicy = {
     enabled: true,

@@ -84,10 +84,9 @@ export class GeminiAdapter implements ProviderAdapter {
         maxOutputTokens: req.maxTokens ?? 2048,
       },
     };
-    // Google Search grounding is silently disabled when a JSON output is requested.
+    // Google Search grounding ne supporte pas responseMimeType : on n'en envoie aucun.
     if (req.search?.enabled) {
       body.tools = [{ google_search: {} }];
-      body.generationConfig = { ...(body.generationConfig as object), responseMimeType: undefined };
     }
     const { value, latencyMs } = await time(async () =>
       httpJson<GeminiResponse>({
