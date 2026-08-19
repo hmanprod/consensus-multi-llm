@@ -1,7 +1,6 @@
 import { getActiveConfiguration, listAllConversations, listProvidersStatus, listSavedConfigs } from "@/app/actions";
 import { PageShell } from "@/app/components/PageShell";
 import { authEnabled } from "@/lib/user-context";
-import { MOCK_MODE } from "@/config/profiles";
 import { isPersistent } from "@/lib/db";
 import { SettingsContent } from "./SettingsContent";
 
@@ -23,7 +22,7 @@ export default async function SettingsPage() {
       <SettingsContent
         activeName={activeName}
         activeConfig={active.config}
-        demo={MOCK_MODE}
+        demo={!providers.some((p) => p.enabled && p.provider !== "mock")}
         providersStatus={providers}
         persistent={isPersistent()}
         authEnabled={authEnabled()}
