@@ -31,6 +31,9 @@ function toProviderError(err: unknown): ProviderError {
     if (status === 408) {
       return new ProviderError("timeout", `provider_http_408: ${body}`, { status });
     }
+    if (status === 413 || (status === 400 && /(maximum context length|context length|token limit|too many tokens|input is too long|request too large)/i.test(body))) {
+      return new ProviderError("context_length", `provider_context_length: ${body}`, { status });
+    }
     if (status >= 500) {
       return new ProviderError("server", `provider_http_${status}: ${body}`, { status });
     }

@@ -126,7 +126,6 @@ export async function startQuestion(input: {
 }): Promise<AskResult> {
   const question = input.question.trim();
   if (!question) throw new Error("question_required");
-  if (question.length > 2000) throw new Error("question_too_long");
 
   return userStorage.run(await getAuthUserId(), async () => {
     await ensureUserSetup();

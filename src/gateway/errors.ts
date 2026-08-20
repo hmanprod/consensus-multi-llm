@@ -7,7 +7,8 @@ export type ProviderErrorType =
   | "http"
   | "empty_response"
   | "refused"
-  | "aborted";
+  | "aborted"
+  | "context_length";
 
 const RETRYABLE_TYPES = new Set<ProviderErrorType>(["rate_limit", "timeout", "server", "network"]);
 
@@ -40,6 +41,8 @@ const FRIENDLY: Record<ProviderErrorType, (status?: number) => string> = {
   empty_response: () => "Le fournisseur a renvoyé une réponse vide.",
   refused: () => "Le fournisseur a refusé la génération de la réponse.",
   aborted: () => "Analyse annulée.",
+  context_length: () =>
+    "Le fournisseur refuse : la question ou le contexte de l'étape dépasse sa fenêtre de contexte. Raccourcissez le message ou découpez-le en plusieurs questions.",
 };
 
 export function friendlyMessage(err: unknown): string {

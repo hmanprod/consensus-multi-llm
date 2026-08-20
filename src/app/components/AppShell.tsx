@@ -28,6 +28,21 @@ import { Toast, type ToastTone } from "./ui/Toast";
 import { ChevronDownIcon, CheckIcon, CloseIcon, CopyIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
+
+function friendlyActionError(message: string): string {
+  switch (message) {
+    case "question_required":
+      return "Veuillez saisir une question avant d'envoyer.";
+    case "configuration_not_found":
+      return "Configuration introuvable : elle a peut-être été supprimée.";
+    case "active_config_invalid":
+      return "Configuration active invalide : réenregistrez une configuration.";
+    case "run_not_found":
+      return "Exécution introuvable : relancez l'analyse.";
+    default:
+      return message;
+  }
+}
 type OutputState = { runId: string; activeTab: OutputPanelTab };
 
 export function AppShell({
@@ -210,7 +225,7 @@ export function AppShell({
       pollId = setInterval(poll, 700);
     } catch (err) {
       if (abortRef.current) return;
-      setError(err instanceof Error ? err.message : "Erreur inattendue");
+      setError(friendlyActionError(err instanceof Error ? err.message : "Erreur inattendue"));
       setBusy(false);
     }
   }
