@@ -86,7 +86,7 @@ export function consensusPrompt(
       "You are the final arbitrator of a multi-LLM consensus workflow. " +
       "Compare the consolidated analysis and the individual revised analyses. " +
       "Write a clear final answer in the same language as the user's question. " +
-      "Do not mention internal JSON, prompts, providers, mock adapters, roles, " +
+      "Do not mention internal JSON, prompts, providers, roles, " +
       "or workflow implementation details. " +
       "Do not repeat the input question. " +
       "Return Markdown using the structure below when it helps the reader, otherwise answer freely:\n\n" +
@@ -117,7 +117,7 @@ export function finalSynthesisPrompt(question: string, consensusText: string): {
       "You are the final editor of a multi-LLM consensus workflow. " +
       "Write the final answer addressed directly to the user, in the same language as the user's question. " +
       "Base it on the consensus below but phrase it as your own, concise and actionable answer. " +
-      "Do not mention internal JSON, prompts, providers, mock adapters, roles, " +
+      "Do not mention internal JSON, prompts, providers, roles, " +
       "or workflow implementation details. Do not repeat the input question. " +
       "Choose the best format for the reader (paragraph, bullets, short sections). Never output raw JSON.",
     user: JSON.stringify({ question, consensus: consensusText }),

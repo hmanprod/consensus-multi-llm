@@ -1,5 +1,6 @@
 import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
+import { getProfile } from "@/config/profiles";
 import { getPrisma } from "@/lib/db";
 import { currentUserId } from "@/lib/user-context";
 import type {
@@ -384,12 +385,13 @@ function decodeConfig(c: ConfigRow) {
   if (json && json.orchestrator && Array.isArray(json.analysts)) {
     return json as unknown as StoredConfig["config"];
   }
+  const fallback = getProfile("economical");
   return {
     profile: c.profile as StoredConfig["profile"],
-    orchestrator: { provider: "mock", model: "orchestrator" },
-    analysts: [{ provider: "mock", model: "analyst" }],
-    consensus: { provider: "mock", model: "consensus" },
-    synthesis: { provider: "mock", model: "synthesis" },
+    orchestrator: fallback.orchestrator,
+    analysts: fallback.analysts,
+    consensus: fallback.consensus,
+    synthesis: fallback.synthesis,
     maxTokensPerCall: c.maxTokens,
     timeoutMs: c.timeoutMs,
     minAgreementScore: c.minAgreementScore,

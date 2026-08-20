@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
-import { getProfile, resolveAvailableSpecs } from "@/config/profiles";
+import { getProfile } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
 import { friendlyMessage } from "@/gateway/errors";
@@ -10,7 +10,7 @@ import { getStore } from "@/lib/store";
 import { clearProgress, getProgress, recordProgress } from "@/lib/progress";
 import { ensureUserSetup } from "@/lib/setup";
 import { encryptSecret } from "@/lib/crypto";
-import { getAuthUserId, userStorage } from "@/lib/user-context";
+import { currentUserId, getAuthUserId, userStorage } from "@/lib/user-context";
 import { NATIVE_SEARCH_PROVIDERS } from "@/research/gateway";
 import type { KnownProvider } from "@/gateway";
 
@@ -52,17 +52,28 @@ async function bindStoredKeys() {
   });
 }
 
-async function resolveConfig(base: OrchestrationConfig): Promise<OrchestrationConfig> {
+async function assertKeysAvailable(config: OrchestrationConfig): Promise<void> {
   const store = await getStore();
-  const hasKey = async (provider: string) => {
-    if (provider === "mock") return true;
+  const missing: string[] = [];
+  const specs = [config.orchestrator, config.consensus, config.synthesis, ...config.analysts];
+  for (const spec of specs) {
+    const provider = spec.provider;
+    if (provider === "mock") {
+      missing.push(provider);
+      continue;
+    }
     const stored = await store.getCredential(provider);
-    if (stored) return true;
-    return Boolean(process.env[`${provider.toUpperCase()}_API_KEY`]);
-  };
-  const keys: Record<string, boolean> = {};
-  for (const p of KNOWN_PROVIDERS) keys[p] = await hasKey(p);
-  return resolveAvailableSpecs(base, (p) => Boolean(keys[p]));
+    const envKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+    if (!stored && !envKey) missing.push(provider);
+  }
+  if (missing.length > 0) {
+    throw new Error(`missing_api_key:${[...new Set(missing)].join(",")}`);
+  }
+}
+
+async function resolveConfig(base: OrchestrationConfig): Promise<OrchestrationConfig> {
+  await assertKeysAvailable(base);
+  return base;
 }
 
 async function savedConfigBase(id: string): Promise<OrchestrationConfig | null> {
@@ -130,6 +141,15 @@ export async function startQuestion(input: {
 
   return userStorage.run(await getAuthUserId(), async () => {
     await ensureUserSetup();
+    const refResult = input.configRef
+      ? ACTIVE_CONFIG_SCHEMA.safeParse(input.configRef)
+      : { success: true, data: null };
+    if (refResult.success && refResult.data) {
+      await resolveConfigRef(refResult.data);
+    } else {
+      await resolveConfigRef(await getActiveConfigRef());
+    }
+
     const store = await getStore();
     let conversationId = input.conversationId;
     let isNewConversation = false;
@@ -161,7 +181,7 @@ export async function executeRun(input: {
       ? await resolveConfigRef(refResult.data)
       : await resolveConfigRef(await getActiveConfigRef());
 
-    const userId = userStorage.getStore() ?? "demo";
+    const userId = currentUserId();
     void userStorage.run(userId, () =>
       runWorkflowInBackground(input.runId, run.conversationId, input.question, config)
     );
@@ -289,7 +309,7 @@ export async function listProvidersStatus() {
 
     const neededSet = new Set<string>();
     const addSpec = (spec: { provider: string }) => {
-      if (spec.provider !== "mock") neededSet.add(spec.provider);
+      neededSet.add(spec.provider);
     };
     for (const c of await store.listConfigs()) {
       [c.config.orchestrator, c.config.consensus, c.config.synthesis, ...c.config.analysts].forEach(addSpec);
@@ -300,10 +320,10 @@ export async function listProvidersStatus() {
       const envKey = process.env[`${p.toUpperCase()}_API_KEY`];
       return {
         provider: p,
-        enabled: p === "mock" || configured.has(p) || Boolean(envKey),
+        enabled: configured.has(p) || Boolean(envKey),
         maskedKey: cred?.maskedKey ?? null,
         updatedAt: cred?.updatedAt ?? null,
-        source: p === "mock" ? "built-in" : configured.has(p) ? "stored" : envKey ? "env" : null,
+        source: configured.has(p) ? "stored" : envKey ? "env" : null,
         needed: neededSet.has(p),
         webSearch: NATIVE_SEARCH_PROVIDERS.has(p),
       };
@@ -314,7 +334,6 @@ export async function listProvidersStatus() {
 export async function testProviderConnection(input: { provider: string }) {
   return asUser(async () => {
     const provider = PROVIDER_SCHEMA.parse(input.provider);
-    if (provider === "mock") return { ok: true, detail: "Provider mock (démo) toujours disponible." };
     await bindStoredKeys();
     const adapter = await getAdapter({ provider, model: "x" });
     if (!adapter.validateCredentials) return { ok: false, detail: "validateCredentials_non_supported" };

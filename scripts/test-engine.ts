@@ -1,9 +1,9 @@
-import { effectiveConfig, describeProfile } from "../src/config/profiles";
+import { getProfile, describeProfile } from "../src/config/profiles";
 import { runWorkflow } from "../src/orchestrator";
 import { generate } from "../src/gateway";
 
 async function main() {
-  const config = effectiveConfig("economical");
+  const config = getProfile("economical");
   console.log(describeProfile("economical"));
   console.log("---");
 

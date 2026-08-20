@@ -20,20 +20,16 @@ const SUB_NAV = [
 export function SettingsContent({
   activeName,
   activeConfig,
-  demo,
   providersStatus,
   persistent,
-  authEnabled,
 }: {
   activeName: string;
   activeConfig: OrchestrationConfig;
-  demo: boolean;
   providersStatus: ProviderStatus[];
   persistent: boolean;
-  authEnabled: boolean;
 }) {
   const [techOpen, setTechOpen] = useState(false);
-  const providersConfigured = providersStatus.filter((p) => p.enabled && p.provider !== "mock").length;
+  const providersConfigured = providersStatus.filter((p) => p.enabled).length;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
@@ -62,7 +58,6 @@ export function SettingsContent({
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-ink">{activeName}</p>
                 <Badge tone="accent">Actif</Badge>
-                {demo && <Badge tone="warning">Démo</Badge>}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
                 {activeConfig.analysts.length + 1} analystes (A orchestrateur inclus), puis une comparaison et une synthèse finale.
@@ -80,15 +75,15 @@ export function SettingsContent({
       <section id="providers" className="mt-8 scroll-mt-4">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Providers</h2>
 
-        {demo ? (
+        {providersConfigured === 0 ? (
           <div className="rounded-xl border border-warning/30 bg-warning-soft/40 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-ink">Mode démo actif</p>
+              <p className="text-sm font-semibold text-ink">Aucun provider configuré</p>
               <Badge tone="warning">À configurer</Badge>
             </div>
             <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-              Les réponses sont simulées et aucun coût réel n&apos;est engagé. Configurez au moins un provider pour
-              lancer des analyses avec vos propres modèles.
+              Les analyses sont bloquées tant qu&apos;aucune clé API n&apos;est enregistrée. Configurez au
+              moins un provider pour lancer des analyses avec vos propres modèles.
             </p>
             <Link href="/providers" className="mt-3 inline-block">
               <Button size="sm" variant="primary">
@@ -136,9 +131,9 @@ export function SettingsContent({
           />
           <StatusRow
             label="Authentification"
-            value={authEnabled ? "Comptes utilisateurs (Clerk)" : "Non requise — mode démo"}
-            badge={authEnabled ? "Actif" : "Information"}
-            tone={authEnabled ? "success" : "neutral"}
+            value="Comptes utilisateurs (Clerk)"
+            badge="Actif"
+            tone="success"
           />
         </div>
       </section>
@@ -159,7 +154,7 @@ export function SettingsContent({
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <StatusRow
               label="Persistance"
-              value={persistent ? "Neon PostgreSQL (Prisma)" : "Mémoire (démo)"}
+              value={persistent ? "Neon PostgreSQL (Prisma)" : "Mémoire (non persistante)"}
               badge={persistent ? "Actif" : "Information"}
               tone={persistent ? "success" : "neutral"}
             />

@@ -11,13 +11,11 @@ import { MenuIcon } from "./ui/icons";
 export function PageShell({
   title,
   conversations: initialConversations,
-  authEnabled,
   children,
   actions,
 }: {
   title: string;
   conversations: StoredConversation[];
-  authEnabled: boolean;
   children: React.ReactNode;
   actions?: React.ReactNode;
 }) {
@@ -55,7 +53,6 @@ export function PageShell({
         onNew={goHome}
         onRename={handleRename}
         onDelete={handleDelete}
-        authEnabled={authEnabled}
         activeHref={pathname}
       />
 

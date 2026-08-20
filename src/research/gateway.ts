@@ -19,7 +19,6 @@ export function researchModeFor(
   spec: ModelSpec,
   hasKey: boolean
 ): ResearchResult["mode"] {
-  if (spec.provider === "mock") return "mock";
   if (NATIVE_SEARCH_PROVIDERS.has(spec.provider) && hasKey) return "native";
   return "disabled";
 }

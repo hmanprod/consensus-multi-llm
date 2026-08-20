@@ -1,4 +1,4 @@
-export type ResearchMode = "native" | "mock" | "disabled";
+export type ResearchMode = "native" | "disabled";
 
 export type Confidence = "low" | "medium" | "high";
 

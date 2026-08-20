@@ -57,7 +57,6 @@ export function Sidebar({
   onNew,
   onRename,
   onDelete,
-  authEnabled,
   activeHref,
 }: {
   conversations: StoredConversation[];
@@ -70,7 +69,6 @@ export function Sidebar({
   onNew: () => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  authEnabled: boolean;
   activeHref?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -94,7 +92,6 @@ export function Sidebar({
       onNew={onNew}
       onRename={onRename}
       onDelete={onDelete}
-      authEnabled={authEnabled}
       activeHref={activeHref}
     />
   );
@@ -156,7 +153,6 @@ function SidebarContent({
   onNew,
   onRename,
   onDelete,
-  authEnabled,
   activeHref,
 }: {
   conversations: StoredConversation[];
@@ -169,7 +165,6 @@ function SidebarContent({
   onNew: () => void;
   onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  authEnabled: boolean;
   activeHref?: string;
 }) {
   if (collapsed) {
@@ -196,7 +191,7 @@ function SidebarContent({
             <SettingsIcon size={18} />
           </ConversationNavLink>
         </nav>
-        <AuthRow enabled={authEnabled} compact />
+        <AuthRow compact />
       </>
     );
   }
@@ -254,7 +249,7 @@ function SidebarContent({
       </nav>
 
       <div className="border-t border-border px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-        <AuthRow enabled={authEnabled} />
+        <AuthRow />
       <div className="mt-2 flex flex-col gap-0.5">
         <SidebarLink href="/configurations" active={activeHref === "/configurations"}>
           <LayersIcon size={15} />
@@ -504,21 +499,11 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function AuthRow({ enabled, compact = false }: { enabled: boolean; compact?: boolean }) {
+function AuthRow({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div className="flex items-center justify-center py-2">
-        {enabled ? <UserButton /> : <span className="text-xs text-ink-faint">Démo</span>}
-      </div>
-    );
-  }
-  if (!enabled) {
-    return (
-      <div className="px-3 pb-1">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg px-2 py-1 text-xs font-medium text-ink-faint">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
-          Mode démo
-        </span>
+        <UserButton />
       </div>
     );
   }

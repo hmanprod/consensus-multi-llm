@@ -25,20 +25,18 @@ import { OutputPanel, type OutputPanelTab } from "./OutputPanel";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { IconButton } from "./ui/IconButton";
 import { Toast, type ToastTone } from "./ui/Toast";
-import { ChevronDownIcon, CheckIcon, CloseIcon, CopyIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
+import { ChevronDownIcon, CheckIcon, CopyIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
 type OutputState = { runId: string; activeTab: OutputPanelTab };
 
 export function AppShell({
   initialConversations,
-  authEnabled,
   providersStatus,
   initialActive,
   savedConfigs,
 }: {
   initialConversations: StoredConversation[];
-  authEnabled: boolean;
   providersStatus: ProviderStatus[];
   initialActive: ActiveConfig;
   savedConfigs: StoredConfig[];
@@ -50,7 +48,6 @@ export function AppShell({
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [output, setOutput] = useState<OutputState | null>(null);
@@ -69,7 +66,8 @@ export function AppShell({
 
   const activeConfig: OrchestrationConfig = resolveActiveRef(activeRef, savedConfigs);
   const missing = useMissingProviders(activeConfig, providersStatus);
-  const showBanner = !bannerDismissed && missing.length > 0;
+  const showBanner = missing.length > 0;
+  const blocked = missing.length > 0;
   const hasConversation = selectedId !== null && messages.length > 0;
   const isEmpty = messages.length === 0;
 
@@ -159,7 +157,7 @@ export function AppShell({
 
   async function submit(q: string) {
     const question = q.trim();
-    if (!question || busy) return;
+    if (!question || busy || blocked) return;
     setBusy(true);
     setError(null);
     abortRef.current = false;
@@ -301,7 +299,6 @@ export function AppShell({
         onNew={newConversation}
         onRename={handleRename}
         onDelete={handleDelete}
-        authEnabled={authEnabled}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -326,16 +323,13 @@ export function AppShell({
           <div className="flex items-center gap-1.5 border-b border-warning/30 bg-warning-soft px-3 py-1.5 text-xs text-warning sm:px-4">
             <InfoIcon size={14} className="shrink-0" />
             <span className="min-w-0 flex-1">
-              {missing.length === activeConfig.analysts.length
-                ? "Mode démo actif · Les analyses sont simulées"
-                : `Clé API manquante : ${missing.join(", ")} — modèle simulé`}
+              {missing.length === 1
+                ? `Analyse bloquée — configurez la clé API du provider : ${missing[0]}`
+                : `Analyse bloquée — configurez la clé API des providers : ${missing.join(", ")}`}
             </span>
             <Link href="/providers" className="shrink-0 font-medium underline hover:opacity-80">
               Configurer
             </Link>
-            <IconButton label="Fermer la notification" onClick={() => setBannerDismissed(true)}>
-              <CloseIcon size={13} />
-            </IconButton>
           </div>
         )}
 
@@ -350,6 +344,7 @@ export function AppShell({
               activeRef={activeRef}
               savedConfigs={savedConfigs}
               onConfigChange={handleConfigChange}
+              disabled={blocked}
             />
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -425,6 +420,7 @@ export function AppShell({
                 activeRef={activeRef}
                 savedConfigs={savedConfigs}
                 onConfigChange={handleConfigChange}
+                disabled={blocked}
               />
               {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             </div>
@@ -457,7 +453,6 @@ export function AppShell({
 function useMissingProviders(config: OrchestrationConfig, providersStatus: ProviderStatus[]): string[] {
   const configured = new Set<string>(providersStatus.filter((p) => p.enabled).map((p) => p.provider));
   const used = [config.orchestrator, ...config.analysts]
-    .filter((s) => s.provider !== "mock")
     .map((s) => s.provider);
   return [...new Set(used.filter((p) => !configured.has(p)))];
 }

@@ -40,7 +40,7 @@ async function main() {
     url: "https://example.com/a",
     title: "Exemple",
     excerpt: "Extrait",
-    provider: "mock",
+    provider: "gemini",
     sourceType: "primary",
     retrievedAt: new Date().toISOString(),
     accessible: true,
@@ -107,9 +107,8 @@ async function main() {
     check(Boolean(OPENAI_COMPATIBLE_BASE_URLS[p]), `provider ${p} : base URL définie`);
   }
 
-  console.log("— Research Gateway / Analyst Agent (mock) —");
+  console.log("— Research Gateway / Analyst Agent —");
 
-  check(researchModeFor({ provider: "mock", model: "mock" }, true) === "mock", "mode mock pour le provider mock");
   check(researchModeFor({ provider: "gemini", model: "gemini-3.7-flash" }, true) === "native", "mode native si clé présente");
   check(researchModeFor({ provider: "gemini", model: "gemini-3.7-flash" }, false) === "disabled", "mode disabled sans clé");
   check(researchModeFor({ provider: "deepseek", model: "deepseek-v4" }, true) === "disabled", "mode disabled sans outil natif");
@@ -131,17 +130,12 @@ async function main() {
     {
       question: "Quels sont les avantages de l'IA générative pour une PME ?",
       label: "B",
-      spec: { provider: "mock", model: "mock" },
+      spec: { provider: "gemini", model: "gemini-3.7-flash" },
       policy,
     },
     { generate }
   );
-  check(agentRes.dossier.mode === "mock", `analyste mock : mode ${agentRes.dossier.mode}`);
-  check(agentRes.dossier.sources.length > 0, `analyste mock : ${agentRes.dossier.sources.length} source(s) trouvée(s)`);
-  check(agentRes.dossier.evidence.length > 0, `analyste mock : ${agentRes.dossier.evidence.length} preuve(s)`);
-  check(agentRes.dossier.queries.length > 0, "analyste mock : requêtes tracées");
-  check(agentRes.dossier.conclusion.length > 0, "analyste mock : conclusion extraite");
-  check(agentRes.dossier.claims.length > 0, "analyste mock : affirmations associées aux preuves");
+  check(agentRes.dossier.mode === "native", `analyste : mode ${agentRes.dossier.mode} (clé requise)`);
 
   console.log("");
   if (failures > 0) {

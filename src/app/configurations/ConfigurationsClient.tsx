@@ -74,11 +74,9 @@ function errorText(err: unknown): string {
 
 export function ConfigurationsClient({
   initial,
-  demo,
   initialActive,
 }: {
   initial: SavedConfig[];
-  demo: boolean;
   initialActive: ActiveConfig;
 }) {
   const [saved, setSaved] = useState(initial);
@@ -263,7 +261,6 @@ export function ConfigurationsClient({
                 key={c.id}
                 config={c}
                 active={activeId === c.id}
-                demo={demo}
                 busy={busy}
                 onActivate={() => activate(c.id)}
                 onEdit={() => openEdit(c)}
@@ -323,7 +320,9 @@ function ConfigEditor({
 
   function addAnalyst() {
     setDraft((d) =>
-      d.analysts.length < MAX_ANALYSTS ? { ...d, analysts: [...d.analysts, { provider: "mock", model: "mock" }] } : d
+      d.analysts.length < MAX_ANALYSTS
+        ? { ...d, analysts: [...d.analysts, { provider: "gemini", model: "gemini-3.7-flash" }] }
+        : d
     );
   }
 
@@ -528,7 +527,6 @@ function NumberField({
 function ConfigCard({
   config,
   active,
-  demo,
   busy,
   onActivate,
   onEdit,
@@ -538,7 +536,6 @@ function ConfigCard({
 }: {
   config: SavedConfig;
   active: boolean;
-  demo: boolean;
   busy: boolean;
   onActivate: () => void;
   onEdit: () => void;
@@ -604,7 +601,6 @@ function ConfigCard({
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-ink">{config.name}</p>
               {active && <Badge tone="accent">Actif</Badge>}
-              {demo && <Badge tone="warning">Démo</Badge>}
             </div>
           )}
           <p className="mt-1 text-xs text-ink-secondary">

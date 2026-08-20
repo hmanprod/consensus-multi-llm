@@ -3,7 +3,9 @@ import { AsyncLocalStorage } from "async_hooks";
 export const userStorage = new AsyncLocalStorage<string>();
 
 export function currentUserId(): string {
-  return userStorage.getStore() ?? "demo";
+  const id = userStorage.getStore();
+  if (!id) throw new Error("user_context_missing");
+  return id;
 }
 
 export function authEnabled(): boolean {
@@ -12,13 +14,14 @@ export function authEnabled(): boolean {
   );
 }
 
+export async function requireAuth(): Promise<string> {
+  if (!authEnabled()) throw new Error("auth_not_configured");
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId } = await auth();
+  if (!userId) throw new Error("unauthorized");
+  return userId;
+}
+
 export async function getAuthUserId(): Promise<string> {
-  if (!authEnabled()) return "demo";
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const { userId } = await auth();
-    return userId ?? "demo";
-  } catch {
-    return "demo";
-  }
+  return requireAuth();
 }

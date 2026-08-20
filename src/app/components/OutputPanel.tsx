@@ -197,7 +197,6 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
 function ModeBadge({ mode }: { mode: AnalystDossier["mode"] }) {
   const map: Record<AnalystDossier["mode"], { label: string; tone: "success" | "neutral" | "warning" }> = {
     native: { label: "Recherche native", tone: "success" },
-    mock: { label: "Démo (mock)", tone: "warning" },
     disabled: { label: "Recherche désactivée", tone: "neutral" },
   };
   const m = map[mode] ?? map.disabled;
@@ -433,7 +432,7 @@ function BudgetView({ run }: { run: StoredRun }) {
 
       {budget.actualCostCents === 0 && (
         <div className="rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning">
-          Coûts à 0,00 € : mode démo (mock) ou modèles sans tarification connue.
+          Coûts à 0,00 € : modèles sans tarification connue.
         </div>
       )}
 

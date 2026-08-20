@@ -11,9 +11,9 @@ Doc de référence : `docs/plan-implementation-consensus-multi-llm.md` (plan de 
 ## État actuel
 
 - **Phase 0 — Cadrage** : plan d'implémentation validé.
-- **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter/mock, orchestrateur A→B→S→R→F, budget/coûts, timeline).
-- **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres, Clerk scaffoldé (env-gated : actif si `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`, données liées à l'utilisateur via AsyncLocalStorage).
-- Mode démo par défaut (provider `mock`, aucun coût) tant qu'aucune clé API n'est configurée ; une clé enregistrée active le provider correspondant.
+- **Phase 1 — Moteur technique** : implémenté (Model Gateway + adapters OpenAI/Anthropic/Gemini/OpenRouter, orchestrateur A→B→S→R→F, budget/coûts, timeline).
+- **Phase 2 — MVP** : en cours — UI chat style Notion + server actions, store Prisma avec fallback mémoire, chiffrement AES-256-GCM des clés API, pages Providers / Configurations / Paramètres, Clerk obligatoire (les pages exigent une authentification et bloquent avec une notification si Clerk n'est pas configuré).
+- Plus aucun mode démo ni provider `mock` : sans clé API pour un provider utilisé par la configuration active, les analyses sont bloquées (bannière persistante + composer désactivé) tant que la clé n'est pas enregistrée.
 - La prochaine étape recommandée : appliquer la migration Neon (`npx prisma migrate deploy`) et configurer Clerk (dashboard + env).
 
 ## Décisions structurantes (à respecter)
@@ -60,8 +60,8 @@ Outilillage installé (scaffold Next.js 16 + Prisma 7) :
 - `npm run lint` — ESLint
 - `npx tsc --noEmit` — typecheck TypeScript
 - `npx prisma generate` — régénère le client Prisma
-- `npx tsx scripts/test-engine.ts` — test du moteur (workflow complet en mode mock)
-- `npx tsx scripts/test-research.ts` — test des contrats recherche + agent analyste (mock)
+- `npx tsx scripts/test-engine.ts` — test du moteur (workflow complet, clés API requises)
+- `npx tsx scripts/test-research.ts` — test des contrats recherche + agent analyste (clés API requises)
 - `npx tsx scripts/benchmark.ts --limit=10` — benchmark des variantes recherche (rapports dans `benchmark-results/`, corpus dans `corpus/questions.ts`)
 
 ## Pour démarrer

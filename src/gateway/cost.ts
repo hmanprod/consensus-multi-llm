@@ -59,15 +59,11 @@ const PRICING: Record<string, Pricing> = {
 
 const DEFAULT_PRICING: Pricing = { promptPer1M: 1, completionPer1M: 3 };
 
-const MOCK_PRICING: Pricing = { promptPer1M: 0, completionPer1M: 0 };
-
 export function hasPricing(spec: ModelSpec): boolean {
-  if (spec.provider === "mock") return true;
   return `${spec.provider}/${spec.model}` in PRICING;
 }
 
 export function getPricing(spec: ModelSpec): Pricing {
-  if (spec.provider === "mock") return MOCK_PRICING;
   const key = `${spec.provider}/${spec.model}`;
   return PRICING[key] ?? DEFAULT_PRICING;
 }

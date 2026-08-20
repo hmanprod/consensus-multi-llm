@@ -26,7 +26,6 @@ export function brandFor(spec?: ModelSpec | null): Brand | null {
   if (!spec) return null;
   const provider = spec.provider.toLowerCase();
   const model = spec.model.toLowerCase();
-  if (/mock/.test(model) && provider === "mock") return null;
   if (/chatgpt|gpt[-.\d]|\bo\d|\bo3/.test(model)) return "openai";
   if (/gemini/.test(model)) return "gemini";
   if (/deepseek/.test(model)) return "deepseek";

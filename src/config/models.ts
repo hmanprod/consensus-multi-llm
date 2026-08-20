@@ -41,7 +41,6 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
     { label: "Claude Opus 5 · via ZenMux", slug: "anthropic/claude-opus-5" },
     { label: "Claude Sonnet 5 · via ZenMux", slug: "anthropic/claude-sonnet-5" },
   ],
-  mock: [{ label: "Mock (démo)", slug: "mock" }],
 };
 
 export const CUSTOM_MODEL_VALUE = "__custom__";
@@ -122,7 +121,6 @@ export const PROVIDER_LABELS: Record<string, string> = {
   meta: "Meta Model API",
   openrouter: "OpenRouter",
   zenmux: "ZenMux",
-  mock: "Mock (démo)",
 };
 
 export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {

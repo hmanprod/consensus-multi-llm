@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { CORPUS } from "../corpus/questions";
-import { effectiveConfig, describeProfile } from "../src/config/profiles";
+import { getProfile, describeProfile } from "../src/config/profiles";
 import type { OrchestrationConfig, RunResult } from "../src/contracts/workflow";
 import type { ResearchMode } from "../src/contracts/research";
 import { runWorkflow } from "../src/orchestrator";
@@ -78,7 +78,7 @@ function uniqueSources(result: RunResult): Set<string> {
 
 function runMetrics(result: RunResult, corpusId: string, question: string): RunMetrics {
   const modes = result.analyses.map((a) => a.dossier?.mode).filter(Boolean) as ResearchMode[];
-  const mode: ResearchMode = modes.includes("native") ? "native" : modes.includes("mock") ? "mock" : "disabled";
+  const mode: ResearchMode = modes.includes("native") ? "native" : "disabled";
   const sources = uniqueSources(result);
   let evidenceCount = 0;
   let resolvableCount = 0;
@@ -132,7 +132,7 @@ async function main() {
   const reports: VariantReport[] = [];
   for (const v of VARIANTS) {
     if (only && !only.includes(v.id)) continue;
-    const base = effectiveConfig("economical");
+    const base = getProfile("economical");
     const config = v.build(base);
     const runs: RunMetrics[] = [];
     for (const c of corpus) {

@@ -54,9 +54,7 @@ export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
     }
   }
 
-  const sorted = [...providers]
-    .filter((p) => p.provider !== "mock")
-    .sort((a, b) => {
+  const sorted = [...providers].sort((a, b) => {
       if (a.needed !== b.needed) return a.needed ? -1 : 1;
       return PROVIDER_LABELS[a.provider].localeCompare(PROVIDER_LABELS[b.provider]);
     });
@@ -82,8 +80,8 @@ export function ProvidersClient({ initial }: { initial: ProviderStatus[] }) {
           </p>
           <p className="mt-1 leading-relaxed text-ink-secondary">
             Les providers marqués <span className="font-medium text-warning">Requis</span> sont
-            utilisés par votre configuration actuelle. Tant que leur clé n&apos;est pas enregistrée,
-            les analyses correspondantes sont simulées en mode démo.
+            utilisés par votre configuration actuelle. Les analyses restent bloquées tant que leur
+            clé n&apos;est pas enregistrée.
           </p>
         </div>
       )}

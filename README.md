@@ -23,13 +23,14 @@ npm install
 npm run dev
 ```
 
-Ouvrez http://localhost:3000. Par défaut, le **mode démo** est actif (provider `mock`, aucun coût). Pour utiliser de vrais modèles :
+Ouvrez http://localhost:3000. L'application exige une authentification (Clerk) et au moins une clé API pour lancer des analyses. Pour démarrer :
 
 1. copiez `.env.example` vers `.env` ;
 2. générez une clé de chiffrement : `openssl rand -hex 32` → `ENCRYPTION_KEY` ;
-3. ajoutez vos clés API dans la page **Providers** (elles sont chiffrées côté serveur), ou via les variables d'environnement `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
+3. configurez Clerk (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`) ;
+4. ajoutez vos clés API dans la page **Providers** (elles sont chiffrées côté serveur), ou via les variables d'environnement `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 
-Une clé enregistrée active le provider correspondant ; les rôles sans clé basculent automatiquement sur le mock.
+Tant qu'un provider utilisé par la configuration active n'a pas de clé, les analyses sont bloquées dans l'interface avec une bannière persistante et un lien vers la page **Providers**.
 
 ## Profils
 

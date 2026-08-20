@@ -1,9 +1,6 @@
 import type { ActiveConfig, OrchestrationConfig, Profile, ProfileRef } from "@/contracts/workflow";
 import type { StoredConfig } from "@/lib/store/types";
 
-export const MOCK_MODE = process.env.MOCK_MODE === "true" ||
-  (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.ZENMUX_API_KEY && !process.env.XAI_API_KEY && !process.env.MODEL_API_KEY && !process.env.KIMI_API_KEY);
-
 export const PROFILE_META: Record<ProfileRef, { name: string; tagline: string; speed: string }> = {
   economical: {
     name: "Économique",
@@ -76,41 +73,13 @@ export function getProfile(profile: Profile): OrchestrationConfig {
   return { ...PROFILES[profile] };
 }
 
-export function effectiveConfig(profile: Profile): OrchestrationConfig {
-  const cfg = getProfile(profile);
-  if (!MOCK_MODE) return cfg;
-  const toMock = (spec: OrchestrationConfig["orchestrator"]) => ({ ...spec, provider: "mock" as const });
-  return {
-    ...cfg,
-    orchestrator: toMock(cfg.orchestrator),
-    analysts: cfg.analysts.map(toMock),
-    consensus: toMock(cfg.consensus),
-    synthesis: toMock(cfg.synthesis),
-  };
-}
-
-export function resolveAvailableSpecs(
-  cfg: OrchestrationConfig,
-  hasKey: (provider: string) => boolean
-): OrchestrationConfig {
-  const pick = (spec: OrchestrationConfig["orchestrator"]) => (hasKey(spec.provider) ? spec : { ...spec, provider: "mock" });
-  return {
-    ...cfg,
-    orchestrator: pick(cfg.orchestrator),
-    analysts: cfg.analysts.map(pick),
-    consensus: pick(cfg.consensus),
-    synthesis: pick(cfg.synthesis),
-  };
-}
-
 export function describeProfile(profile: Profile): string {
   const cfg = getProfile(profile);
   const line = (label: string, spec: OrchestrationConfig["orchestrator"]) =>
-    `${label}: ${MOCK_MODE ? "mock/" : ""}${spec.provider}/${spec.model}`;
+    `${label}: ${spec.provider}/${spec.model}`;
   const label = profile === "custom" ? "Personnalisé" : PROFILE_META[profile].name;
   return [
     `Profil ${label}`,
-    ...(MOCK_MODE ? ["Mode démo actif (provider mock, aucun coût réel)."] : []),
     `Processus collaboratif : Analyse A (orchestrateur) → analyses indépendantes → consolidations → révisions → consensus → synthèse finale.`,
     line("Orchestrateur (Analyse A + consolidations)", cfg.orchestrator),
     line("Consensus", cfg.consensus),

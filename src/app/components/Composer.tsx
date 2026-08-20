@@ -16,6 +16,7 @@ export function Composer({
   activeRef,
   savedConfigs,
   onConfigChange,
+  disabled,
 }: {
   question: string;
   setQuestion: (s: string) => void;
@@ -25,9 +26,10 @@ export function Composer({
   activeRef: ActiveConfig;
   savedConfigs: StoredConfig[];
   onConfigChange: (ref: ActiveConfig) => void;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const canSubmit = question.trim().length > 0 && !busy;
+  const canSubmit = question.trim().length > 0 && !busy && !disabled;
   const selectValue = savedConfigs.some((c) => configRefKey(activeRef) === `saved:${c.id}`)
     ? configRefKey(activeRef)
     : savedConfigs[0]
@@ -57,9 +59,10 @@ export function Composer({
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Posez votre question…"
+          disabled={disabled}
+          placeholder={disabled ? "Configurez vos providers pour lancer une analyse" : "Posez votre question…"}
           aria-label="Votre question"
-          className="max-h-40 min-h-[2rem] flex-1 resize-none bg-transparent px-2 py-1 text-base leading-relaxed text-ink outline-none placeholder:text-ink-secondary/70 sm:text-[15px]"
+          className="max-h-40 min-h-[2rem] flex-1 resize-none bg-transparent px-2 py-1 text-base leading-relaxed text-ink outline-none placeholder:text-ink-secondary/70 disabled:cursor-not-allowed sm:text-[15px]"
         />
         {busy && onStop ? (
           <button
@@ -111,7 +114,9 @@ export function Composer({
           </Link>
         </label>
         <span className="hidden text-[11px] text-ink-faint opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 sm:inline">
-          Entrée pour envoyer · Maj + Entrée pour nouvelle ligne
+          {disabled
+            ? "Analyse bloquée tant que les clés API ne sont pas configurées"
+            : "Entrée pour envoyer · Maj + Entrée pour nouvelle ligne"}
         </span>
       </div>
     </div>

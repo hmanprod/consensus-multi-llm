@@ -21,6 +21,7 @@ export function EmptyState({
   activeRef,
   savedConfigs,
   onConfigChange,
+  disabled,
 }: {
   question: string;
   setQuestion: (s: string) => void;
@@ -30,6 +31,7 @@ export function EmptyState({
   activeRef: ActiveConfig;
   savedConfigs: StoredConfig[];
   onConfigChange: (ref: ActiveConfig) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex h-full items-center justify-center px-6 py-8">
@@ -72,6 +74,7 @@ export function EmptyState({
             activeRef={activeRef}
             savedConfigs={savedConfigs}
             onConfigChange={onConfigChange}
+            disabled={disabled}
           />
         </div>
       </div>

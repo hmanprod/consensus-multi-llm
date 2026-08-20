@@ -1,5 +1,4 @@
 import type { GatewayContext, GenerationResult, GenerationRequest, ModelSpec, ProviderAdapter } from "@/contracts/gateway";
-import { MockAdapter } from "./adapters/mock";
 import { AnthropicAdapter } from "./adapters/anthropic";
 import { GeminiAdapter } from "./adapters/gemini";
 import { OpenAICompatibleAdapter } from "./adapters/openaiCompatible";
@@ -36,7 +35,6 @@ export const KNOWN_PROVIDERS = [
   "meta",
   "openrouter",
   "zenmux",
-  "mock",
 ] as const;
 export type KnownProvider = (typeof KNOWN_PROVIDERS)[number];
 
@@ -63,8 +61,6 @@ export async function getAdapter(spec: ModelSpec, opts?: { search?: boolean }): 
       return new GeminiAdapter(apiKey);
     case "openrouter":
       return new OpenRouterAdapter(apiKey);
-    case "mock":
-      return new MockAdapter();
     default: {
       if (RESPONSES_ALWAYS.has(spec.provider) || (opts?.search && RESPONSES_PROVIDERS.has(spec.provider))) {
         return new OpenAIResponsesAdapter(spec.provider, apiKey);

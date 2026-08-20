@@ -287,7 +287,7 @@ class Orchestrator {
     const uncertainties = analyses.flatMap((a) => a.dossier?.uncertainties ?? []).slice(0, 10);
     const queries = analyses.flatMap((a) => a.dossier?.queries ?? []).slice(0, 20);
     const modes = analyses.map((a) => a.dossier?.mode).filter(Boolean);
-    const mode: AnalystDossier["mode"] = modes.includes("native") ? "native" : modes.includes("mock") ? "mock" : "disabled";
+    const mode: AnalystDossier["mode"] = modes.includes("native") ? "native" : "disabled";
     return {
       analysis: "",
       conclusion: "",
