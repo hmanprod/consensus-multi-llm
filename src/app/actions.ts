@@ -185,6 +185,7 @@ async function runWorkflowInBackground(
     });
     const store = await getStore();
     await store.setRunResult(runId, result);
+    await store.saveRunInvocations(runId, result.budget?.steps ?? []);
     await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, runId);
   } catch (err) {
     const message = friendlyMessage(err);

@@ -139,6 +139,7 @@ model ModelInvocation {
   modelId     String?
   model       Model?       @relation(fields: [modelId], references: [id])
   role        String // orchestrator | analyst | critique | consensus | synthesis | targeted
+  step        String? // étape du workflow : A | B | AB | B+AB | S | F
   status      String // ok | error | timeout | skipped
   promptTokens Int        @default(0)
   completionTokens Int    @default(0)

@@ -2,32 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { StoredRun } from "@/lib/store";
-import type { ConsensusReport } from "@/contracts/workflow";
 import type { AnalystDossier } from "@/contracts/research";
-import { parseConsensusReport } from "@/lib/consensus-report";
 import { getRunData } from "@/app/actions";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { formatBudget } from "@/lib/format";
 import { Badge } from "./ui/Badge";
 import { Skeleton } from "./ui/Skeleton";
 import {
   AlertIcon,
   CheckIcon,
-  ChevronDownIcon,
   CloseIcon,
-  ColumnsIcon,
   CopyIcon,
   DownloadIcon,
   GaugeIcon,
   LinkIcon,
+  WalletIcon,
 } from "./ui/icons";
 
-export type OutputPanelTab = "summary" | "comparison" | "metrics" | "sources";
+export type OutputPanelTab = "sources" | "metrics" | "budget";
 
-const TABS: { id: OutputPanelTab; label: string; icon: typeof ColumnsIcon }[] = [
-  { id: "summary", label: "Synthèse", icon: ColumnsIcon },
-  { id: "comparison", label: "Comparaison", icon: ColumnsIcon },
+const TABS: { id: OutputPanelTab; label: string; icon: typeof LinkIcon }[] = [
   { id: "sources", label: "Sources", icon: LinkIcon },
   { id: "metrics", label: "Métriques", icon: GaugeIcon },
+  { id: "budget", label: "Budget", icon: WalletIcon },
 ];
 
 function excerpt(text: string, len = 140): string {
@@ -167,20 +163,16 @@ export function OutputPanel({
           </div>
         )}
 
-        {!loading && run?.result && activeTab === "summary" && (
-          <SummaryView run={run} />
-        )}
-
-        {!loading && run?.result && activeTab === "comparison" && (
-          <ComparisonView run={run} />
-        )}
-
         {!loading && run?.result && activeTab === "sources" && (
           <SourcesView run={run} />
         )}
 
         {!loading && run?.result && activeTab === "metrics" && (
           <MetricsView run={run} />
+        )}
+
+        {!loading && run?.result && activeTab === "budget" && (
+          <BudgetView run={run} />
         )}
       </div>
     </div>
@@ -200,90 +192,6 @@ function StatCard({ label, value, unit }: { label: string; value: string; unit?:
       </p>
     </div>
   );
-}
-
-function SummaryView({ run }: { run: StoredRun }) {
-  const r = run.result!;
-  const report = useMemo<ConsensusReport | null>(
-    () => r.finalSynthesis.report ?? parseConsensusReport(r.finalSynthesis.text),
-    [r]
-  );
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard label="Durée" value={`${(r.totalLatencyMs / 1000).toFixed(1)}`} unit="s" />
-        <StatCard label="Tokens" value={String(r.totalTokens)} />
-      </div>
-
-      {report ? (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-3.5">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Recommandation</p>
-              {report.confidence && <ConfidenceBadge confidence={report.confidence} />}
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-ink">{report.recommendation}</p>
-          </div>
-
-          <ReportSection title="Résumé" items={report.summary} />
-          <ReportSection title="Points d'accord" items={report.agreements} />
-          <ReportSection title="Points de désaccord" items={report.disagreements} />
-          <ReportSection title="Limites" items={report.limitations} />
-          {report.unverified && report.unverified.length > 0 && (
-            <ReportSection title="Informations non vérifiées" items={report.unverified} />
-          )}
-          {report.sources && report.sources.length > 0 && (
-            <div>
-              <SectionTitle>Sources</SectionTitle>
-              <ul className="space-y-1.5 text-sm">
-                {report.sources.map((item, i) => (
-                  <SourceLink key={i} item={item} />
-                ))}
-              </ul>
-            </div>
-          )}
-          <ReportSection title="Prochaine étape" items={report.nextSteps} />
-
-          <Accordion title="Synthèse complète (Markdown)">
-            <MarkdownRenderer content={r.finalSynthesis.text} />
-          </Accordion>
-        </div>
-      ) : (
-        <div>
-          <SectionTitle>Synthèse</SectionTitle>
-          <MarkdownRenderer content={r.finalSynthesis.text} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReportSection({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) return null;
-  return (
-    <div>
-      <SectionTitle>{title}</SectionTitle>
-      <ul className="space-y-1.5 text-sm leading-relaxed text-ink">
-        {items.map((item, i) => (
-          <li key={i} className="flex gap-2">
-            <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-const CONFIDENCE_LABEL: Record<"low" | "medium" | "high", string> = {
-  low: "Confiance faible",
-  medium: "Confiance moyenne",
-  high: "Confiance élevée",
-};
-
-function ConfidenceBadge({ confidence }: { confidence: "low" | "medium" | "high" }) {
-  const tone = confidence === "high" ? "success" : confidence === "low" ? "warning" : "neutral";
-  return <Badge tone={tone}>{CONFIDENCE_LABEL[confidence]}</Badge>;
 }
 
 function ModeBadge({ mode }: { mode: AnalystDossier["mode"] }) {
@@ -462,79 +370,6 @@ function SourcesView({ run }: { run: StoredRun }) {
   );
 }
 
-function ComparisonView({ run }: { run: StoredRun }) {
-  const r = run.result!;
-  return (
-    <div className="space-y-5">
-      <div>
-        <SectionTitle>Positions des analystes</SectionTitle>
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface text-left text-xs text-ink-faint">
-                <th className="px-3 py-2 font-medium">Analyste</th>
-                <th className="px-3 py-2 font-medium">Modèle</th>
-                <th className="px-3 py-2 font-medium">Position</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {r.analyses.map((a) => (
-                <tr key={a.label}>
-                  <td className="px-3 py-2.5 align-top font-medium text-ink">{a.label}</td>
-                  <td className="px-3 py-2.5 align-top text-xs text-ink-secondary">
-                    {a.model.provider}/{a.model.model}
-                  </td>
-                  <td className="px-3 py-2.5 align-top text-xs leading-relaxed text-ink-secondary">
-                    {excerpt(a.text)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {r.consolidations.map((c) => (
-        <Accordion key={c.label} title={`Analyse consolidée ${c.label} — orchestrateur`}>
-          <MarkdownRenderer content={c.text} />
-        </Accordion>
-      ))}
-
-      {(r.revisions ?? []).map((rev) => (
-        <Accordion
-          key={rev.label}
-          title={`Révision ${rev.label} — analyste (${rev.model.provider}/${rev.model.model})`}
-        >
-          <MarkdownRenderer content={rev.text} />
-        </Accordion>
-      ))}
-
-      {r.consensus && (
-        <Accordion title={`Consensus — ${r.consensus.model.provider}/${r.consensus.model.model}`}>
-          <MarkdownRenderer content={r.consensus.text} />
-        </Accordion>
-      )}
-    </div>
-  );
-}
-
-function Accordion({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-lg border border-border">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-surface"
-      >
-        <span>{title}</span>
-        <ChevronDownIcon size={15} className={`shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && <div className="border-t border-border px-3 py-3">{children}</div>}
-    </div>
-  );
-}
-
 function MetricsView({ run }: { run: StoredRun }) {
   const r = run.result!;
   const models = new Set<string>();
@@ -562,6 +397,100 @@ function MetricsView({ run }: { run: StoredRun }) {
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
           <span className="text-ink-secondary">Statut</span>
           <Badge tone="accent">{run.status}</Badge>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BudgetView({ run }: { run: StoredRun }) {
+  const r = run.result!;
+  const budget = r.budget;
+
+  if (!budget) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-surface p-3.5 text-sm text-ink-secondary">
+          Budget non disponible pour cette analyse (exécutée avant l&apos;ajout de la ventilation des coûts).
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <StatCard label="Estimation" value={formatBudget(r.estimatedCostCents)} />
+          <StatCard label="Coût réel" value={formatBudget(r.actualCostCents)} />
+        </div>
+      </div>
+    );
+  }
+
+  const steps = budget.steps;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2">
+        <StatCard label="Estimation" value={formatBudget(budget.estimatedCostCents)} />
+        <StatCard label="Coût réel" value={formatBudget(budget.actualCostCents)} />
+        <StatCard label="Écart" value={formatBudget(budget.estimatedCostCents - budget.actualCostCents)} />
+      </div>
+
+      {budget.actualCostCents === 0 && (
+        <div className="rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning">
+          Coûts à 0,00 € : mode démo (mock) ou modèles sans tarification connue.
+        </div>
+      )}
+
+      <div>
+        <SectionTitle>Par étape ({steps.length})</SectionTitle>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-surface text-left text-xs text-ink-faint">
+                <th className="px-3 py-2 font-medium">Étape</th>
+                <th className="px-3 py-2 font-medium">Modèle</th>
+                <th className="px-3 py-2 text-right font-medium">Tokens</th>
+                <th className="px-3 py-2 text-right font-medium">Durée</th>
+                <th className="px-3 py-2 text-right font-medium">Estimé</th>
+                <th className="px-3 py-2 text-right font-medium">Réel</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {steps.map((s) => (
+                <tr key={s.step}>
+                  <td className="px-3 py-2.5 align-top">
+                    <span className="font-medium text-ink">{s.label}</span>
+                    {s.status !== "done" && (
+                      <Badge tone={s.status === "error" ? "danger" : "neutral"} className="ml-2">
+                        {s.status === "error" ? "Erreur" : "Ignoré"}
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-xs text-ink-secondary">
+                    {s.model.provider}/{s.model.model}
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-right text-xs text-ink-secondary">
+                    {s.promptTokens + s.completionTokens}
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-right text-xs text-ink-secondary">
+                    {(s.latencyMs / 1000).toFixed(1)} s
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-right text-xs text-ink-secondary">
+                    {formatBudget(s.estimatedCostCents)}
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-right text-xs font-medium text-ink">
+                    {formatBudget(s.actualCostCents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t border-border bg-surface">
+              <tr className="text-xs">
+                <td className="px-3 py-2 font-medium text-ink">Total</td>
+                <td />
+                <td className="px-3 py-2 text-right text-ink-secondary">{r.totalTokens}</td>
+                <td className="px-3 py-2 text-right text-ink-secondary">{(r.totalLatencyMs / 1000).toFixed(1)} s</td>
+                <td className="px-3 py-2 text-right text-ink-secondary">{formatBudget(budget.estimatedCostCents)}</td>
+                <td className="px-3 py-2 text-right font-medium text-ink">{formatBudget(budget.actualCostCents)}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
     </div>

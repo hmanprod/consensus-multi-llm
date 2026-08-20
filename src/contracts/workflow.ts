@@ -78,6 +78,25 @@ export interface TimelineEntry {
   detail?: string;
 }
 
+export interface StepBudget {
+  step: WorkflowStep;
+  label: string;
+  model: ModelSpec;
+  status: "done" | "error" | "skipped";
+  estimatedCostCents: number;
+  actualCostCents: number;
+  promptTokens: number;
+  completionTokens: number;
+  latencyMs: number;
+}
+
+export interface RunBudget {
+  estimatedCostCents: number;
+  actualCostCents: number;
+  currency: "USD";
+  steps: StepBudget[];
+}
+
 export interface RunResult {
   analyses: AnalysisOutput[];
   consolidations: AnalysisOutput[];
@@ -89,6 +108,7 @@ export interface RunResult {
   actualCostCents: number;
   totalLatencyMs: number;
   totalTokens: number;
+  budget?: RunBudget;
 }
 
 export interface RunStatus {

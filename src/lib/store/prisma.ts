@@ -1,4 +1,4 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult, WorkflowProgress } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
 import { currentUserId } from "@/lib/user-context";
@@ -168,6 +168,23 @@ export const prismaStore: Store = {
     };
   },
 
+  async saveRunInvocations(runId, steps) {
+    if (steps.length === 0) return;
+    await getPrisma().modelInvocation.createMany({
+      data: steps.map((s) => ({
+        runId,
+        step: s.step,
+        role: invocationRole(s.step),
+        status: invocationStatus(s.status),
+        promptTokens: s.promptTokens,
+        completionTokens: s.completionTokens,
+        costCents: s.actualCostCents,
+        latencyMs: s.latencyMs,
+        modelSlug: `${s.model.provider}/${s.model.model}`,
+      })),
+    });
+  },
+
   async failRun(runId, error) {
     const r = await getPrisma().workflowRun.update({
       where: { id: runId },
@@ -326,6 +343,17 @@ export const prismaStore: Store = {
 
 function mask(encryptedKey: string): string {
   return `••••${encryptedKey.slice(-4)}`;
+}
+
+function invocationRole(step: string): string {
+  if (step === "S") return "consensus";
+  if (step === "F") return "synthesis";
+  if (step.includes("+")) return "analyst";
+  return step === "A" || step.length > 1 ? "orchestrator" : "analyst";
+}
+
+function invocationStatus(status: StepBudget["status"]): string {
+  return status === "done" ? "ok" : status;
 }
 
 type ConfigRow = {

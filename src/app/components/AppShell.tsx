@@ -54,7 +54,7 @@ export function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [output, setOutput] = useState<OutputState | null>(null);
-  const [lastOutputTab, setLastOutputTab] = useState<OutputPanelTab>("summary");
+  const [lastOutputTab, setLastOutputTab] = useState<OutputPanelTab>("sources");
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [runKey, setRunKey] = useState(0);
   const [activeProgress, setActiveProgress] = useState<WorkflowProgress[]>([]);
@@ -379,7 +379,7 @@ export function AppShell({
                     runId={m.runId}
                     onCopy={() => copyMessage(m.content)}
                     onDownload={() => downloadMessage(m.content, m.runId!)}
-                    onOpenDetails={() => openOutput(m.runId!, "comparison")}
+                    onOpenDetails={() => openOutput(m.runId!, "sources")}
                     onRegenerate={regenerate}
                     onDeepen={deepen}
                   />

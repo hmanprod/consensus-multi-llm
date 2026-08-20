@@ -2,7 +2,9 @@ import type {
   AnalysisOutput,
   FinalSynthesisOutput,
   OrchestrationConfig,
+  RunBudget,
   RunResult,
+  StepBudget,
   TimelineEntry,
   WorkflowProgress,
   WorkflowStep,
@@ -54,11 +56,27 @@ export function runWorkflow(
   return new Orchestrator(question, config, deps).run();
 }
 
+interface StepCharge {
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  latencyMs: number;
+}
+
+interface EstimateStep {
+  step: WorkflowStep;
+  label: string;
+  model: ModelSpec;
+  estimatedCostCents: number;
+}
+
 class Orchestrator {
   private timeline: TimelineEntry[] = [];
   private totalCostCents = 0;
   private totalTokens = 0;
   private totalLatency = 0;
+  private stepCharges = new Map<WorkflowStep, StepCharge>();
+  private stepStatus = new Map<WorkflowStep, StepBudget["status"]>();
 
   constructor(
     private question: string,
@@ -83,13 +101,21 @@ class Orchestrator {
     return text.length > 0 && !text.startsWith("[");
   }
 
-  private account(spec: ModelSpec, usage: Usage, latencyMs: number) {
-    this.totalCostCents += tokensToUsd(spec, usage) * 100;
+  private account(spec: ModelSpec, usage: Usage, latencyMs: number, step: WorkflowStep) {
+    const costCents = tokensToUsd(spec, usage) * 100;
+    this.totalCostCents += costCents;
     this.totalTokens += usage.promptTokens + usage.completionTokens;
     this.totalLatency += latencyMs;
+    const cur = this.stepCharges.get(step);
+    this.stepCharges.set(step, {
+      promptTokens: (cur?.promptTokens ?? 0) + usage.promptTokens,
+      completionTokens: (cur?.completionTokens ?? 0) + usage.completionTokens,
+      costCents: (cur?.costCents ?? 0) + costCents,
+      latencyMs: (cur?.latencyMs ?? 0) + latencyMs,
+    });
   }
 
-  private async call(spec: ModelSpec, messages: ChatMessage[]): Promise<GenerationResult> {
+  private async call(spec: ModelSpec, messages: ChatMessage[], step: WorkflowStep): Promise<GenerationResult> {
     const res = await this.deps.generate({
       spec,
       messages,
@@ -97,13 +123,17 @@ class Orchestrator {
       timeoutMs: this.config.timeoutMs,
       temperature: 0.7,
     });
-    this.account(spec, res.usage, res.latencyMs);
+    this.account(spec, res.usage, res.latencyMs, step);
     return res;
   }
 
-  private async safeCall(spec: ModelSpec, messages: ChatMessage[]): Promise<{ text: string; usage: Usage; error?: string }> {
+  private async safeCall(
+    spec: ModelSpec,
+    messages: ChatMessage[],
+    step: WorkflowStep
+  ): Promise<{ text: string; usage: Usage; error?: string }> {
     try {
-      const res = await this.call(spec, messages);
+      const res = await this.call(spec, messages, step);
       return { text: res.text, usage: res.usage };
     } catch (err) {
       const msg = message(err);
@@ -152,7 +182,8 @@ class Orchestrator {
           onPhase: (phase) => this.emit({ step, status: phase, label: `Analyse ${label}`, model: spec }),
         }
       );
-      this.account(spec, res.usage, res.latencyMs);
+      this.account(spec, res.usage, res.latencyMs, step);
+      this.stepStatus.set(step, "done");
       this.tick(step, `Analyse ${label} (${role})`, "done", Date.now() - t, `${spec.provider}/${spec.model} · ${res.dossier.mode}`);
       this.emit({ step, status: "done", label: `Analyse ${label}`, durationMs: Date.now() - t, content: res.dossier.analysis, model: spec });
       if (index !== undefined) this.lastAnalystTexts[index] = res.dossier.analysis;
@@ -167,6 +198,7 @@ class Orchestrator {
       };
     } catch (err) {
       const msg = message(err);
+      this.stepStatus.set(step, "error");
       this.tick(step, `Analyse ${label} (${role})`, "error", Date.now() - t, msg);
       this.emit({ step, status: "error", label: `Analyse ${label}`, durationMs: Date.now() - t, detail: msg, model: spec });
       if (index !== undefined) this.lastAnalystTexts[index] = `[étape non effectuée : ${msg}]`;
@@ -202,8 +234,10 @@ class Orchestrator {
     this.emit({ step, status: "writing", label: `Révision ${label}`, model: spec });
     const res = await this.safeCall(
       spec,
-      this.messages(revisionPrompt(letter, this.lastAnalystText(index), fullLabel, fullText))
+      this.messages(revisionPrompt(letter, this.lastAnalystText(index), fullLabel, fullText)),
+      step
     );
+    this.stepStatus.set(step, res.error ? "error" : "done");
     this.tick(step, `Révision ${label} (analyste)`, res.error ? "error" : "done", Date.now() - t, res.error);
     this.emit({
       step,
@@ -268,7 +302,8 @@ class Orchestrator {
 
   async run(): Promise<RunResult> {
     const started = Date.now();
-    const estimatedCostCents = this.estimate();
+    const estimate = this.estimate();
+    const estimatedCostCents = estimate.totalCents;
     const analystCount = this.config.analysts.length;
 
     // A — Analyse orchestrateur (première analyse, avec recherche si dispo)
@@ -319,8 +354,10 @@ class Orchestrator {
             this.toSourceRefs(currentDossier?.sources),
             newRefs
           )
-        )
+        ),
+        step
       );
+      this.stepStatus.set(step, res.error ? "error" : "done");
       const merged: AnalysisOutput = {
         label: nextLabel,
         role: "orchestrator",
@@ -372,8 +409,10 @@ class Orchestrator {
     const tS = Date.now();
     const cRes = await this.safeCall(
       this.config.consensus,
-      this.messages(consensusPrompt(this.question, consensusInput))
+      this.messages(consensusPrompt(this.question, consensusInput)),
+      "S"
     );
+    this.stepStatus.set("S", cRes.error ? "error" : "done");
     const consensusText = sanitizeFinalResponse(cRes.text);
     const consensus: FinalSynthesisOutput = {
       label: "S",
@@ -399,8 +438,10 @@ class Orchestrator {
     const tF = Date.now();
     const fRes = await this.safeCall(
       this.config.synthesis,
-      this.messages(finalSynthesisPrompt(this.question, consensusText))
+      this.messages(finalSynthesisPrompt(this.question, consensusText)),
+      "F"
     );
+    this.stepStatus.set("F", fRes.error ? "error" : "done");
     const finalText = sanitizeFinalResponse(fRes.text);
     const finalSynthesis: FinalSynthesisOutput = {
       label: "F",
@@ -431,25 +472,60 @@ class Orchestrator {
       actualCostCents: Math.round(this.totalCostCents * 100) / 100,
       totalLatencyMs: Date.now() - started,
       totalTokens: this.totalTokens,
+      budget: this.buildBudget(estimate.steps),
     };
   }
 
-  private estimate(): number {
+  private estimate(): { totalCents: number; steps: EstimateStep[] } {
     const promptLen = roughTokens(describeConfig(this.config) + this.question);
-    let total = 0;
-    total += estimateCost(this.config.orchestrator, promptLen, 500); // analyse A orchestrateur avec recherche
-    for (const a of this.config.analysts) {
-      total += estimateCost(a, promptLen, 500); // analyse indépendante avec recherche
+    const steps: EstimateStep[] = [];
+    const push = (step: WorkflowStep, label: string, model: ModelSpec, estimatedCostCents: number) =>
+      steps.push({ step, label, model, estimatedCostCents });
+
+    push("A", "Analyse A (orchestrateur)", this.config.orchestrator, estimateCost(this.config.orchestrator, promptLen, 500));
+    this.config.analysts.forEach((a, i) => {
+      const letter = this.analystLabel(i);
+      push(letter as WorkflowStep, `Analyse ${letter} (analyste)`, a, estimateCost(a, promptLen, 500));
+    });
+    let label = "A";
+    for (let i = 0; i < this.config.analysts.length; i++) {
+      const letter = this.analystLabel(i);
+      const next = label + letter;
+      push(next as WorkflowStep, `Consolidation ${next} (orchestrateur)`, this.config.orchestrator, estimateCost(this.config.orchestrator, promptLen * 3, 400));
+      label = next;
     }
-    const n = this.config.analysts.length;
-    for (let i = 0; i < n; i++) {
-      total += estimateCost(this.config.orchestrator, promptLen * 3, 400); // consolidation
+    for (let i = 0; i < this.config.analysts.length; i++) {
+      const letter = this.analystLabel(i);
+      const step = `${letter}+${label}` as WorkflowStep;
+      push(step, `Révision ${letter}+${label} (analyste)`, this.config.analysts[i], estimateCost(this.config.analysts[i], promptLen * 5, 400));
     }
-    for (let i = 0; i < n; i++) {
-      total += estimateCost(this.config.analysts[i], promptLen * 5, 400); // révision
-    }
-    total += estimateCost(this.config.consensus, promptLen * 6, 700); // consensus
-    total += estimateCost(this.config.synthesis, promptLen * 2, 500); // synthèse finale
-    return total / 100;
+    push("S", "Consensus", this.config.consensus, estimateCost(this.config.consensus, promptLen * 6, 700));
+    push("F", "Synthèse finale", this.config.synthesis, estimateCost(this.config.synthesis, promptLen * 2, 500));
+
+    const totalCents = steps.reduce((acc, s) => acc + s.estimatedCostCents, 0);
+    return { totalCents, steps };
+  }
+
+  private buildBudget(estimates: EstimateStep[]): RunBudget {
+    const steps: StepBudget[] = estimates.map((e) => {
+      const charge = this.stepCharges.get(e.step);
+      return {
+        step: e.step,
+        label: e.label,
+        model: e.model,
+        status: this.stepStatus.get(e.step) ?? "skipped",
+        estimatedCostCents: Math.round(e.estimatedCostCents * 100) / 100,
+        actualCostCents: Math.round((charge?.costCents ?? 0) * 100) / 100,
+        promptTokens: charge?.promptTokens ?? 0,
+        completionTokens: charge?.completionTokens ?? 0,
+        latencyMs: charge?.latencyMs ?? 0,
+      };
+    });
+    return {
+      estimatedCostCents: Math.round(steps.reduce((a, s) => a + s.estimatedCostCents, 0) * 100) / 100,
+      actualCostCents: Math.round(steps.reduce((a, s) => a + s.actualCostCents, 0) * 100) / 100,
+      currency: "USD",
+      steps,
+    };
   }
 }

@@ -173,7 +173,7 @@ export function WorkflowMessage({
 
         <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-ink-faint">
-            Comparez les positions, vérifiez les sources ou consultez les métriques dans le panneau.
+            Vérifiez les sources ou consultez les métriques dans le panneau.
           </p>
           <Button size="sm" variant="secondary" onClick={onOpenDetails} className="w-full justify-center sm:w-auto">
             <PanelIcon size={14} />

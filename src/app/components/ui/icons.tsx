@@ -229,6 +229,16 @@ export function GaugeIcon(props: IconProps) {
   );
 }
 
+export function WalletIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+      <path d="M3 7a2 2 0 0 1 2-2h13" />
+      <path d="M16 12.5h.01" />
+    </Icon>
+  );
+}
+
 export function ColumnsIcon(props: IconProps) {
   return (
     <Icon {...props}>
