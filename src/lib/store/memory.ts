@@ -1,4 +1,4 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowProgress } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowCheckpoint, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import type {
   StoredConfig,
@@ -12,6 +12,7 @@ const conversations = new Map<string, StoredConversation>();
 const messages = new Map<string, StoredMessage[]>();
 const runs = new Map<string, StoredRun>();
 const runProgress = new Map<string, WorkflowProgress[]>();
+const runCheckpoints = new Map<string, WorkflowCheckpoint>();
 const runInvocations = new Map<string, StepBudget[]>();
 const credentials = new Map<string, { encryptedKey: string; keyIv: string }>();
 const configs = new Map<string, StoredConfig>();
@@ -112,6 +113,23 @@ export const memoryStore: Store = {
     run.status = "failed";
     run.error = error;
     return run;
+  },
+
+  async resetRun(runId) {
+    const run = runs.get(runId);
+    if (!run) throw new Error("run_not_found");
+    run.status = "running";
+    run.error = undefined;
+    run.result = undefined;
+    return run;
+  },
+
+  async saveRunCheckpoint(runId, checkpoint) {
+    runCheckpoints.set(runId, checkpoint);
+  },
+
+  async getRunCheckpoint(runId) {
+    return runCheckpoints.get(runId) ?? null;
   },
 
   async getRunProgress(runId) {

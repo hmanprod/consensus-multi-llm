@@ -13,6 +13,7 @@ import {
   listAllConversations,
   listProvidersStatus,
   renameConversation,
+  resumeRun,
   setActiveConfiguration,
   startQuestion,
 } from "@/app/actions";
@@ -28,6 +29,10 @@ import { Toast, type ToastTone } from "./ui/Toast";
 import { ChevronDownIcon, CheckIcon, CloseIcon, CopyIcon, InfoIcon, MenuIcon, PlusIcon } from "./ui/icons";
 
 type ProviderStatus = Awaited<ReturnType<typeof listProvidersStatus>>[number];
+
+function nowMs(): number {
+  return Date.now();
+}
 
 function friendlyActionError(message: string): string {
   switch (message) {
@@ -179,7 +184,7 @@ export function AppShell({
     setError(null);
     abortRef.current = false;
     setRunKey((k) => k + 1);
-    setActiveStartedAt(Date.now());
+    setActiveStartedAt(nowMs());
     setActiveProgress([]);
     setLiveDone(false);
     currentRunIdRef.current = null;
@@ -236,6 +241,59 @@ export function AppShell({
     setLiveDone(true);
     setQuestion("");
     showToast("Arrêt demandé — le traitement peut continuer côté serveur.", "info");
+  }
+
+  async function resume(runId: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    abortRef.current = false;
+    setRunKey((k) => k + 1);
+    setActiveStartedAt(nowMs());
+    setActiveProgress([]);
+    setLiveDone(false);
+    currentRunIdRef.current = runId;
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    try {
+      const res = await resumeRun({ runId });
+      if (abortRef.current) return;
+      await refreshConversation(res.conversationId);
+
+      const stopPolling = () => {
+        if (pollId) clearInterval(pollId);
+        pollId = null;
+      };
+      const poll = async () => {
+        if (abortRef.current || !pollId || currentRunIdRef.current !== runId) {
+          stopPolling();
+          return;
+        }
+        try {
+          const snap = await getRunSnapshot(runId);
+          if (abortRef.current || !pollId || currentRunIdRef.current !== runId) {
+            stopPolling();
+            return;
+          }
+          if (snap.progress.length) setActiveProgress(snap.progress);
+          if (snap.status !== "running") {
+            stopPolling();
+            setBusy(false);
+            setLiveDone(true);
+            setConversations(await listAllConversations());
+            setQuestion("");
+            await refreshConversation(res.conversationId);
+          }
+        } catch {
+          // statut indisponible : on retente au prochain tick
+        }
+      };
+      poll();
+      pollId = setInterval(poll, 700);
+    } catch (err) {
+      if (abortRef.current) return;
+      setError(friendlyActionError(err instanceof Error ? err.message : "Erreur inattendue"));
+      setBusy(false);
+    }
   }
 
   async function handleRename(id: string, title: string) {
@@ -397,6 +455,7 @@ export function AppShell({
                     onOpenDetails={() => openOutput(m.runId!, "sources")}
                     onRegenerate={regenerate}
                     onDeepen={deepen}
+                    onResume={() => resume(m.runId!)}
                   />
                 ) : (
                   <article key={m.id} className="rounded-xl border border-border bg-bg p-4 shadow-sm sm:p-5">
@@ -457,6 +516,7 @@ export function AppShell({
             setOutput((o) => (o ? { ...o, activeTab: tab } : o));
           }}
           onClose={closeOutput}
+          onResume={() => resume(output.runId)}
         />
       )}
 

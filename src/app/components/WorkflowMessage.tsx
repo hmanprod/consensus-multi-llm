@@ -43,6 +43,7 @@ export function WorkflowMessage({
   onOpenDetails,
   onRegenerate,
   onDeepen,
+  onResume,
 }: {
   content: string;
   runId: string;
@@ -51,6 +52,7 @@ export function WorkflowMessage({
   onOpenDetails: () => void;
   onRegenerate: () => void;
   onDeepen: () => void;
+  onResume: () => void;
 }) {
   const [run, setRun] = useState<Awaited<ReturnType<typeof getRunData>> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,6 +101,16 @@ export function WorkflowMessage({
           <p className="text-sm font-medium text-danger">L&apos;analyse n&apos;a pas abouti</p>
         </div>
         <p className="mt-2 text-sm text-danger">{content}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={onResume} aria-label="Reprendre l'analyse depuis la dernière étape réussie" title="Reprendre l'analyse">
+            <RefreshIcon size={14} />
+            <span>Reprendre l&apos;analyse</span>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onRegenerate} aria-label="Relancer l'analyse depuis le début" title="Relancer depuis le début">
+            <SparklesIcon size={14} />
+            <span>Relancer depuis le début</span>
+          </Button>
+        </div>
       </div>
     );
   }

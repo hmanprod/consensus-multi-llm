@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import type { ActiveConfig, OrchestrationConfig } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, WorkflowCheckpoint } from "@/contracts/workflow";
 import { getProfile, resolveAvailableSpecs } from "@/config/profiles";
 import { runWorkflow } from "@/orchestrator";
 import { generate, setGatewayContext, getAdapter, KNOWN_PROVIDERS } from "@/gateway";
@@ -172,7 +172,8 @@ async function runWorkflowInBackground(
   runId: string,
   conversationId: string,
   question: string,
-  config: OrchestrationConfig
+  config: OrchestrationConfig,
+  resume?: WorkflowCheckpoint
 ) {
   try {
     await bindStoredKeys();
@@ -181,7 +182,11 @@ async function runWorkflowInBackground(
       onProgress: async (progress) => {
         await recordProgress(runId, progress);
       },
-    });
+      onCheckpoint: async (checkpoint) => {
+        const store = await getStore();
+        await store.saveRunCheckpoint(runId, checkpoint);
+      },
+    }, resume);
     const store = await getStore();
     await store.setRunResult(runId, result);
     await store.saveRunInvocations(runId, result.budget?.steps ?? []);
@@ -198,6 +203,34 @@ async function runWorkflowInBackground(
   } finally {
     await clearProgress(runId);
   }
+}
+
+export async function resumeRun(input: { runId: string; configRef?: ActiveConfig }) {
+  return userStorage.run(await getAuthUserId(), async () => {
+    const store = await getStore();
+    const run = await store.getRun(input.runId);
+    if (!run) throw new Error("run_not_found");
+    if (run.status !== "failed") throw new Error("run_not_failed");
+
+    const checkpoint = await store.getRunCheckpoint(input.runId);
+    let config: OrchestrationConfig;
+    if (checkpoint?.config) {
+      config = checkpoint.config;
+    } else if (input.configRef && input.configRef.type === "saved") {
+      config = await resolveConfigRef(input.configRef);
+    } else {
+      config = await resolveConfigRef(await getActiveConfigRef());
+    }
+
+    await store.resetRun(input.runId);
+    await clearProgress(input.runId);
+
+    const userId = userStorage.getStore() ?? "demo";
+    void userStorage.run(userId, () =>
+      runWorkflowInBackground(input.runId, run.conversationId, run.question, config, checkpoint ?? undefined)
+    );
+    return { runId: input.runId, conversationId: run.conversationId };
+  });
 }
 
 export async function getRunProgress(runId: string) {

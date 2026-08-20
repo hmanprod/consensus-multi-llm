@@ -1,6 +1,7 @@
-import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowProgress } from "@/contracts/workflow";
+import type { ActiveConfig, OrchestrationConfig, RunResult, StepBudget, WorkflowCheckpoint, WorkflowProgress } from "@/contracts/workflow";
 import { DEFAULT_ACTIVE_CONFIG } from "@/contracts/workflow";
 import { getPrisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { currentUserId } from "@/lib/user-context";
 import type {
   StoredConfig,
@@ -198,6 +199,35 @@ export const prismaStore: Store = {
       error,
       createdAt: r.createdAt.getTime(),
     };
+  },
+
+  async resetRun(runId) {
+    const r = await getPrisma().workflowRun.update({
+      where: { id: runId },
+      data: { status: "running", error: null, resultJson: Prisma.DbNull },
+    });
+    return {
+      runId: r.id,
+      conversationId: r.conversationId,
+      status: "running" as const,
+      question: r.question,
+      createdAt: r.createdAt.getTime(),
+    };
+  },
+
+  async saveRunCheckpoint(runId, checkpoint) {
+    await getPrisma().workflowRun.update({
+      where: { id: runId },
+      data: { checkpointJson: checkpoint as unknown as object },
+    });
+  },
+
+  async getRunCheckpoint(runId) {
+    const r = await getPrisma().workflowRun.findUnique({
+      where: { id: runId },
+      select: { checkpointJson: true },
+    });
+    return (r?.checkpointJson as unknown as WorkflowCheckpoint | undefined) ?? null;
   },
 
   async getRunProgress(runId) {

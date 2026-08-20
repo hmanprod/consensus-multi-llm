@@ -16,6 +16,7 @@ import {
   DownloadIcon,
   GaugeIcon,
   LinkIcon,
+  RefreshIcon,
   WalletIcon,
 } from "./ui/icons";
 
@@ -37,11 +38,13 @@ export function OutputPanel({
   activeTab,
   onTabChange,
   onClose,
+  onResume,
 }: {
   runId: string;
   activeTab: OutputPanelTab;
   onTabChange: (tab: OutputPanelTab) => void;
   onClose: () => void;
+  onResume: () => void;
 }) {
   const [run, setRun] = useState<StoredRun | null>(null);
   const [loading, setLoading] = useState(true);
@@ -162,6 +165,15 @@ export function OutputPanel({
               Échec de l&apos;analyse
             </p>
             <p className="mt-2 text-sm text-danger">{run.error}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={onResume}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-strong"
+              >
+                <RefreshIcon size={13} />
+                Reprendre l&apos;analyse
+              </button>
+            </div>
           </div>
         )}
 

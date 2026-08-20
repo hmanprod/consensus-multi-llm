@@ -4,6 +4,7 @@ import type {
   RunResult,
   RunStatus,
   StepBudget,
+  WorkflowCheckpoint,
   WorkflowProgress,
 } from "@/contracts/workflow";
 
@@ -66,6 +67,9 @@ export interface Store {
   setRunResult(runId: string, result: RunResult): Promise<StoredRun>;
   saveRunInvocations(runId: string, steps: StepBudget[]): Promise<void>;
   failRun(runId: string, error: string): Promise<StoredRun>;
+  resetRun(runId: string): Promise<StoredRun>;
+  saveRunCheckpoint(runId: string, checkpoint: WorkflowCheckpoint): Promise<void>;
+  getRunCheckpoint(runId: string): Promise<WorkflowCheckpoint | null>;
   getRunProgress(runId: string): Promise<WorkflowProgress[]>;
   setRunProgress(runId: string, progress: WorkflowProgress[]): Promise<void>;
   clearRunProgress(runId: string): Promise<void>;

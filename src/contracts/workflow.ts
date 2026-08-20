@@ -49,6 +49,21 @@ export interface FinalSynthesisOutput extends AnalysisOutput {
   report?: ConsensusReport;
 }
 
+export interface ResumedStep {
+  output: AnalysisOutput;
+  latencyMs: number;
+  detail?: string;
+}
+
+export interface WorkflowCheckpoint {
+  config: OrchestrationConfig;
+  analysisA?: ResumedStep;
+  analystAnalyses?: (ResumedStep | null)[]; // null = analyste en échec (à retenter à la reprise)
+  consolidations?: ResumedStep[];
+  revisions?: ResumedStep[];
+  consensus?: FinalSynthesisOutput & { latencyMs: number };
+}
+
 export type WorkflowStep = "A" | "B" | "C" | "AB" | "ABC" | "B+ABC" | "C+ABC" | "S" | "F";
 
 export type WorkflowOutputKind =
