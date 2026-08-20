@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { StoredRun } from "@/lib/store";
 import type { AnalystDossier } from "@/contracts/research";
 import { getRunData } from "@/app/actions";
+import { buildRunReportMarkdown } from "@/lib/export-report";
 import { formatBudget } from "@/lib/format";
 import { Badge } from "./ui/Badge";
 import { Skeleton } from "./ui/Skeleton";
@@ -70,8 +71,9 @@ export function OutputPanel({
   }
 
   function downloadSynthesis() {
-    if (!synthesis) return;
-    const blob = new Blob([synthesis], { type: "text/markdown;charset=utf-8" });
+    if (!run?.result) return;
+    const markdown = buildRunReportMarkdown(run.question, run.result);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
