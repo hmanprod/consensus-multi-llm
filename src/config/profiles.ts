@@ -41,14 +41,14 @@ export function parseConfigRefKey(key: string): ActiveConfig {
 const PROFILES: Record<Exclude<Profile, "custom">, OrchestrationConfig> = {
   economical: {
     profile: "economical",
-    orchestrator: { provider: "openai", model: "chatgpt-5.6" },
+    orchestrator: { provider: "openai", model: "chatgpt-5.6-luna" },
     analysts: [
       { provider: "gemini", model: "gemini-3.7-flash" },
       { provider: "xai", model: "grok-4.6" },
       { provider: "kimi", model: "kimi-k3" },
     ],
-    consensus: { provider: "openai", model: "chatgpt-5.6" },
-    synthesis: { provider: "openai", model: "chatgpt-5.6" },
+    consensus: { provider: "openai", model: "chatgpt-5.6-luna" },
+    synthesis: { provider: "openai", model: "chatgpt-5.6-luna" },
     maxTokensPerCall: 2048,
     timeoutMs: 120_000,
     minAgreementScore: 70,

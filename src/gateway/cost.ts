@@ -7,8 +7,10 @@ interface Pricing {
 }
 
 const PRICING: Record<string, Pricing> = {
-  // OpenAI
-  "openai/chatgpt-5.6": { promptPer1M: 1.25, completionPer1M: 7.5, cacheInputPer1M: 0.125 },
+  // OpenAI (gpt-5.6 alias → Sol ; tarifs ZenMux 07-2026)
+  "openai/chatgpt-5.6": { promptPer1M: 7.5, completionPer1M: 37.5, cacheInputPer1M: 0.75 },
+  "openai/chatgpt-5.6-luna": { promptPer1M: 0.3, completionPer1M: 1.5, cacheInputPer1M: 0.03 },
+  "openai/chatgpt-5.6-terra": { promptPer1M: 3, completionPer1M: 15, cacheInputPer1M: 0.3 },
   // Anthropic
   "anthropic/claude-opus-5": { promptPer1M: 5, completionPer1M: 25, cacheInputPer1M: 0.5 },
   // Gemini
@@ -28,8 +30,9 @@ const PRICING: Record<string, Pricing> = {
   // OpenRouter — routage automatique
   "openrouter/auto": { promptPer1M: 1, completionPer1M: 3 },
   // OpenRouter — modèles explicites (tarifs OpenRouter)
-  "openrouter/openai/gpt-5.6-sol": { promptPer1M: 1.25, completionPer1M: 7.5, cacheInputPer1M: 0.125 },
-  "openrouter/openai/gpt-5.6-luna": { promptPer1M: 4, completionPer1M: 16 },
+  "openrouter/openai/gpt-5.6-sol": { promptPer1M: 7.5, completionPer1M: 37.5, cacheInputPer1M: 0.75 },
+  "openrouter/openai/gpt-5.6-luna": { promptPer1M: 0.3, completionPer1M: 1.5, cacheInputPer1M: 0.03 },
+  "openrouter/openai/gpt-5.6-terra": { promptPer1M: 3, completionPer1M: 15, cacheInputPer1M: 0.3 },
   "openrouter/google/gemini-3.7-flash": { promptPer1M: 0.375, completionPer1M: 1.875, cacheInputPer1M: 0.0375 },
   "openrouter/x-ai/grok-4.5": { promptPer1M: 2, completionPer1M: 6, cacheInputPer1M: 0.5 },
   "openrouter/meta/muse-spark-1.2": { promptPer1M: 1.25, completionPer1M: 4.25, cacheInputPer1M: 0.15 },
@@ -43,8 +46,9 @@ const PRICING: Record<string, Pricing> = {
   // ZenMux — routage automatique
   "zenmux/auto": { promptPer1M: 1, completionPer1M: 3 },
   // ZenMux — modèles explicites
-  "zenmux/openai/gpt-5.6-sol": { promptPer1M: 1.25, completionPer1M: 7.5, cacheInputPer1M: 0.125 },
-  "zenmux/openai/gpt-5.6-luna": { promptPer1M: 4, completionPer1M: 16 },
+  "zenmux/openai/gpt-5.6-sol": { promptPer1M: 7.5, completionPer1M: 37.5, cacheInputPer1M: 0.75 },
+  "zenmux/openai/gpt-5.6-luna": { promptPer1M: 0.3, completionPer1M: 1.5, cacheInputPer1M: 0.03 },
+  "zenmux/openai/gpt-5.6-terra": { promptPer1M: 3, completionPer1M: 15, cacheInputPer1M: 0.3 },
   "zenmux/google/gemini-3.7-flash": { promptPer1M: 0.375, completionPer1M: 1.875, cacheInputPer1M: 0.0375 },
   "zenmux/x-ai/grok-4.5": { promptPer1M: 2, completionPer1M: 6, cacheInputPer1M: 0.5 },
   "zenmux/meta/muse-spark-1.2": { promptPer1M: 1.25, completionPer1M: 4.25, cacheInputPer1M: 0.15 },

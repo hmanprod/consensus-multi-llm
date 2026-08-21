@@ -4,7 +4,11 @@ export interface ModelOption {
 }
 
 export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
-  openai: [{ label: "ChatGPT 5.6", slug: "chatgpt-5.6" }],
+  openai: [
+    { label: "ChatGPT 5.6", slug: "chatgpt-5.6" },
+    { label: "ChatGPT 5.6 Luna", slug: "chatgpt-5.6-luna" },
+    { label: "ChatGPT 5.6 Terra", slug: "chatgpt-5.6-terra" },
+  ],
   gemini: [{ label: "Gemini 3.7 Flash", slug: "gemini-3.7-flash" }],
   anthropic: [{ label: "Claude Opus 5", slug: "claude-opus-5" }],
   deepseek: [{ label: "DeepSeek V4", slug: "deepseek-v4" }],
@@ -17,6 +21,7 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
     { label: "Auto (OpenRouter)", slug: "auto" },
     { label: "ChatGPT 5.6 Sol · via OpenRouter", slug: "openai/gpt-5.6-sol" },
     { label: "ChatGPT 5.6 Luna · via OpenRouter", slug: "openai/gpt-5.6-luna" },
+    { label: "ChatGPT 5.6 Terra · via OpenRouter", slug: "openai/gpt-5.6-terra" },
     { label: "Gemini 3.7 Flash · via OpenRouter", slug: "google/gemini-3.7-flash" },
     { label: "Grok 4.5 · via OpenRouter", slug: "x-ai/grok-4.5" },
     { label: "Muse Spark 1.2 · via OpenRouter", slug: "meta/muse-spark-1.2" },
@@ -31,6 +36,7 @@ export const MODELS_BY_PROVIDER: Record<string, ModelOption[]> = {
     { label: "Auto (ZenMux)", slug: "auto" },
     { label: "ChatGPT 5.6 Sol · via ZenMux", slug: "openai/gpt-5.6-sol" },
     { label: "ChatGPT 5.6 Luna · via ZenMux", slug: "openai/gpt-5.6-luna" },
+    { label: "ChatGPT 5.6 Terra · via ZenMux", slug: "openai/gpt-5.6-terra" },
     { label: "Gemini 3.7 Flash · via ZenMux", slug: "google/gemini-3.7-flash" },
     { label: "Grok 4.5 · via ZenMux", slug: "x-ai/grok-4.5" },
     { label: "Muse Spark 1.2 · via ZenMux", slug: "meta/muse-spark-1.2" },
