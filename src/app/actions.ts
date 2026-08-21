@@ -183,14 +183,23 @@ async function runWorkflowInBackground(
         await recordProgress(runId, progress);
       },
       onCheckpoint: async (checkpoint) => {
-        const store = await getStore();
-        await store.saveRunCheckpoint(runId, checkpoint);
+        try {
+          const store = await getStore();
+          await store.saveRunCheckpoint(runId, checkpoint);
+        } catch {
+          // Best-effort : la reprise ne dépend pas de la persistance du checkpoint.
+        }
       },
     }, resume);
     const store = await getStore();
     await store.setRunResult(runId, result);
-    await store.saveRunInvocations(runId, result.budget?.steps ?? []);
-    await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, runId);
+    try {
+      await store.saveRunInvocations(runId, result.budget?.steps ?? []);
+      await store.addMessage(conversationId, "assistant", result.finalSynthesis.text, runId);
+    } catch {
+      // Best-effort : le résultat est déjà enregistré ; l'historique des invocations
+      // et le message d'assistant ne doivent pas faire échouer un run abouti.
+    }
   } catch (err) {
     const message = friendlyMessage(err);
     try {
